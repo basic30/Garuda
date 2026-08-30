@@ -64,7 +64,9 @@ async def upload_and_detect_sar_image(
     inc_id = f"INC-UPLOAD-{timestamp_str[-6:]}"
     now_iso = datetime.datetime.utcnow().isoformat() + "Z"
 
-    uploaded_url = f"http://127.0.0.1:8000/{file_path.replace('\\', '/')}"
+    # uploaded_url = f"http://127.0.0.1:8000/{file_path.replace('\\', '/')}"
+    formatted_path = file_path.replace('\\', '/')
+    uploaded_url = f"https://sagar-netra-api.onrender.com/{formatted_path}"
     pred_url = f"http://127.0.0.1:8000/{mask_out_path.replace('\\', '/')}" if mask_out_path != file_path else "http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png"
 
     new_incident = {
