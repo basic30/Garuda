@@ -188,10 +188,15 @@ export default function TimelineSlider({
           />
 
           {/* Step Tick Marks */}
-          <div className="flex justify-between items-center mt-2 px-1">
+          <div className="relative w-full h-8 mt-2">
             {STEPS.map((s) => {
               const isActive = timelineHour === s.hour;
               const isPassed = timelineHour >= s.hour;
+              const percent = (s.hour / 48) * 100;
+              let translateClass = '-translate-x-1/2';
+              if (s.hour === 0) translateClass = 'translate-x-0';
+              if (s.hour === 48) translateClass = '-translate-x-full';
+
               return (
                 <button
                   key={s.hour}
@@ -199,10 +204,11 @@ export default function TimelineSlider({
                     setIsPlaying(false);
                     setTimelineHour(s.hour);
                   }}
-                  className={`flex flex-col items-center group transition-colors focus:outline-none`}
+                  style={{ left: `${percent}%` }}
+                  className={`absolute top-0 flex flex-col items-center group transition-colors focus:outline-none ${translateClass}`}
                 >
                   <div
-                    className={`w-2 h-2 rounded-full transition-all ${
+                    className={`w-2.5 h-2.5 rounded-full transition-all ${
                       isActive
                         ? 'bg-cyan-400 ring-4 ring-cyan-500/30 scale-125'
                         : isPassed

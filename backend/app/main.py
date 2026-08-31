@@ -12,6 +12,7 @@ from backend.app.api.vessels import router as vessels_router
 from backend.app.api.detection import router as detection_router
 from backend.app.services.live_ais_service import connect_to_aisstream, get_connection_status
 
+# AegisSpill Main FastAPI Application Entrypoint (v1.0.6)
 app = FastAPI(
     title="Marine Oil Spill Detection, Drift Tracking & Vessel Attribution System API",
     version="1.0.0",

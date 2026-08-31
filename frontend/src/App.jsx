@@ -25,7 +25,7 @@ export default function App() {
   const [isOriginLoading, setIsOriginLoading] = useState(false);
 
   // Map & Timeline States
-  const [mapStyle, setMapStyle] = useState('carto_voyager'); // 'carto_voyager' | 'carto_dark' | 'satellite'
+  const [mapStyle, setMapStyle] = useState('carto_voyager');
   const [timelineHour, setTimelineHour] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
@@ -81,7 +81,6 @@ export default function App() {
 
   // Function to select an incident
   const selectIncident = (incidentId) => {
-    // 1. Auto-switch map to Satellite view & keep camera focused strictly on selected spill
     setMapStyle('satellite');
     setLayerToggles(prev => ({
       ...prev,
@@ -96,19 +95,17 @@ export default function App() {
 
     fetch(`${API_BASE}/incidents/${incidentId}`)
       .then(res => res.json())
-      .then(inc => {
-        setSelectedIncident(inc);
+      .then(setSelectedIncident)
+      .catch(console.error);
 
-        fetch(`${API_BASE}/incidents/${incidentId}/geometry`)
-          .then(r => r.json())
-          .then(setGeometry)
-          .catch(console.error);
+    fetch(`${API_BASE}/incidents/${incidentId}/geometry`)
+      .then(r => r.json())
+      .then(setGeometry)
+      .catch(console.error);
 
-        fetch(`${API_BASE}/incidents/${incidentId}/vessels`)
-          .then(r => r.json())
-          .then(d => setVessels(d.candidate_vessels || []))
-          .catch(console.error);
-      })
+    fetch(`${API_BASE}/incidents/${incidentId}/vessels`)
+      .then(r => r.json())
+      .then(d => setVessels(d.candidate_vessels || []))
       .catch(console.error);
   };
 
@@ -149,7 +146,6 @@ export default function App() {
       const newInc = uploadData.incident;
       setAllIncidents(prev => [newInc, ...prev]);
 
-      // Re-fetch all geometries
       fetch(`${API_BASE}/incidents/all-geometry`)
         .then(res => res.json())
         .then(setAllGeometries)

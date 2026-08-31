@@ -10,9 +10,47 @@ from shapely.geometry import mapping
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
 from ml.src.inference import run_inference
 from backend.app.services.geometry_service import compute_spill_geometry, generate_organic_spill_polygon
+from backend.app.services.location_service import is_location_on_land, extract_image_coordinates, validate_sar_image_characteristics
 from backend.app.api.incidents import GLOBAL_INCIDENTS_CACHE, GLOBAL_GEOMETRIES_CACHE
 
 router = APIRouter(prefix="/detection", tags=["Detection"])
+
+@router.post("/extract-metadata")
+async def extract_sar_image_metadata(file: UploadFile = File(...)):
+    """
+    Extract GPS metadata (GeoTIFF CRS/bounds or EXIF tags) from uploaded SAR image
+    and check if extracted or default location falls on land.
+    """
+    upload_dir = "data/raw/temp_uploads"
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_ext = os.path.splitext(file.filename)[1].lower()
+    temp_path = os.path.join(upload_dir, f"temp_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{file_ext}")
+
+    with open(temp_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    lat, lon, has_meta = extract_image_coordinates(temp_path)
+    is_valid_sar, sar_reason = validate_sar_image_characteristics(temp_path)
+
+    # Clean up temp file
+    if os.path.exists(temp_path):
+        os.remove(temp_path)
+
+    is_land = False
+    if has_meta and lat is not None and lon is not None:
+        is_land = is_location_on_land(lat, lon)
+
+    return {
+        "filename": file.filename,
+        "has_metadata": has_meta,
+        "is_valid_sar": is_valid_sar,
+        "sar_reason": sar_reason,
+        "latitude": lat,
+        "longitude": lon,
+        "is_land": is_land
+    }
+
 
 @router.post("/upload")
 async def upload_and_detect_sar_image(
@@ -23,6 +61,7 @@ async def upload_and_detect_sar_image(
     """
     Custom SAR Satellite Image Upload & Live Detection Endpoint:
     - Accepts uploaded SAR image (.png, .jpg, .tif).
+    - Validates target coordinates (rejecting land locations).
     - Runs PyTorch U-Net model inference & post-processing.
     - Generates organic polygon geometry and incident record.
     - Plots newly detected spill polygon on the map in real time.
@@ -42,20 +81,75 @@ async def upload_and_detect_sar_image(
 
     print(f"Uploaded SAR image saved to: {file_path}", flush=True)
 
+    # Validate SAR satellite image characteristics (grayscale radar profile & contrast check)
+    is_valid_sar, sar_reason = validate_sar_image_characteristics(file_path)
+    if not is_valid_sar:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=400, detail=sar_reason)
+
+    # If coordinates match default values, try auto-extracting from image metadata
+    if latitude == 1.2800 and longitude == 103.8500:
+        meta_lat, meta_lon, has_meta = extract_image_coordinates(file_path)
+        if has_meta and meta_lat is not None and meta_lon is not None:
+            latitude, longitude = meta_lat, meta_lon
+
+    # Land vs Ocean validation
+    if is_location_on_land(latitude, longitude):
+        # Clean up uploaded file since coordinates are invalid
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Selected location ({latitude:.4f}°N, {longitude:.4f}°E) is on land. Marine oil spill detection, drift forecasting, and vessel attribution require ocean/water coordinates."
+        )
+
+    # Generate web-compatible PNG preview images for browser rendering (converts TIFF/GeoTIFF to standard web PNG)
+    preview_dir = "outputs/previews"
+    os.makedirs(preview_dir, exist_ok=True)
+    preview_filename = f"preview_upload_{timestamp_str}.png"
+    preview_path = os.path.join(preview_dir, preview_filename)
+
+    try:
+        raw_img = cv2.imread(file_path, cv2.IMREAD_COLOR)
+        if raw_img is not None:
+            if raw_img.dtype != np.uint8:
+                raw_img = cv2.normalize(raw_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+            resized_preview = cv2.resize(raw_img, (256, 256))
+            cv2.imwrite(preview_path, resized_preview)
+        else:
+            shutil.copyfile(file_path, preview_path)
+    except Exception as e:
+        print(f"Preview generation warning: {e}", flush=True)
+        shutil.copyfile(file_path, preview_path)
+
     # Run PyTorch U-Net Inference & Post-processing
     try:
         ckpt_path = "ml/checkpoints/best_model.pth"
         if os.path.exists(ckpt_path):
-            inf_result = run_inference(file_path, checkpoint_path=ckpt_path)
+            inf_result = run_inference(file_path, checkpoint_path=ckpt_path, output_dir="outputs/masks")
             mask_out_path = inf_result["mask_out_path"]
             retained_components = inf_result["post_report"]["retained_spill_components"]
         else:
-            mask_out_path = file_path
+            mask_out_path = preview_path
             retained_components = 1
     except Exception as e:
         print(f"Inference warning: {e}. Falling back to geometry extraction...", flush=True)
-        mask_out_path = file_path
+        mask_out_path = preview_path
         retained_components = 1
+
+    # Check if U-Net model detected valid oil spill features
+    if retained_components == 0:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        if os.path.exists(preview_path):
+            os.remove(preview_path)
+        if mask_out_path and os.path.exists(mask_out_path) and mask_out_path != file_path:
+            os.remove(mask_out_path)
+        raise HTTPException(
+            status_code=400,
+            detail="No oil spill signatures were detected in this SAR image. Please upload a valid SAR satellite scene containing marine oil spill features."
+        )
 
     # Extract spatial geometry
     poly = generate_organic_spill_polygon(latitude, longitude, length_km=7.5, width_km=1.8, angle_deg=55, seed=int(timestamp_str[-4:]))
@@ -64,8 +158,8 @@ async def upload_and_detect_sar_image(
     inc_id = f"INC-UPLOAD-{timestamp_str[-6:]}"
     now_iso = datetime.datetime.utcnow().isoformat() + "Z"
 
-    uploaded_url = f"http://127.0.0.1:8000/{file_path.replace('\\', '/')}"
-    pred_url = f"http://127.0.0.1:8000/{mask_out_path.replace('\\', '/')}" if mask_out_path != file_path else "http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png"
+    uploaded_url = f"http://127.0.0.1:8000/{preview_path.replace('\\', '/')}"
+    pred_url = f"http://127.0.0.1:8000/{mask_out_path.replace('\\', '/')}"
 
     new_incident = {
         "incident_id": inc_id,
