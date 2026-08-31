@@ -132,7 +132,7 @@ export default function IncidentDetails({
               <span className="text-emerald-400 font-semibold">256x256 uint8</span>
             </div>
             <img
-              src={incident?.sar_image_url || 'http://127.0.0.1:8000/results/dataset_samples/sample_1_palsar_0.png'}
+              src={incident?.sar_image_url || 'https://sagar-netra-api.onrender.com/results/dataset_samples/sample_1_palsar_0.png'}
               alt="SAR Satellite Input"
               className="w-full h-auto rounded-lg border border-slate-700/60 object-cover"
               onError={(e) => { e.target.style.display = 'none'; }}
@@ -147,7 +147,7 @@ export default function IncidentDetails({
               </span>
             </div>
             <img
-              src={incident?.prediction_image_url || 'http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png'}
+              src={incident?.prediction_image_url || 'http://sagar-netra-api.onrender.com/results/test_predictions/test_pred_1_palsar_2828.png'}
               alt="U-Net Mask Prediction Overlay"
               className="w-full h-auto rounded-lg border border-slate-700/60 object-cover"
               onError={(e) => { e.target.style.display = 'none'; }}
