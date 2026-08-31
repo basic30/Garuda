@@ -68,23 +68,23 @@ def _initialize_indian_ocean_incidents():
         return
 
     sample_images = [
-        "http://127.0.0.1:8000/results/dataset_samples/sample_1_palsar_0.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_2_palsar_1.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_3_palsar_10.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_4_palsar_100.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_5_palsar_1000.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_6_palsar_1007.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_7_palsar_1011.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_2_palsar_1.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_1_palsar_0.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_3_palsar_10.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_4_palsar_100.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_5_palsar_1000.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_6_palsar_1007.png",
+        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_7_palsar_1011.png",
     ]
 
     prediction_images = [
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_2_palsar_1625.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_3_sentinel_192.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_4_sentinel_2356.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_5_palsar_269.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_70_palsar_2417.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_79_palsar_801.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_1_palsar_2828.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_2_palsar_1625.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_3_sentinel_192.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_4_sentinel_2356.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_5_palsar_269.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_70_palsar_2417.png",
+        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_79_palsar_801.png",
     ]
 
     features = []
