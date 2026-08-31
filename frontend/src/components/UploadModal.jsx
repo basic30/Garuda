@@ -27,7 +27,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       metaData.append('file', file);
 
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/detection/extract-metadata', {
+        const res = await fetch('https://sagar-netra-api.onrender.com/api/detection/extract-metadata', {
           method: 'POST',
           body: metaData
         });
@@ -74,7 +74,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     formData.append('longitude', lon);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/detection/upload', {
+      const response = await fetch('https://sagar-netra-api.onrender.com/api/detection/upload', {
         method: 'POST',
         body: formData
       });
