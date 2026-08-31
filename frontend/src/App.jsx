@@ -42,7 +42,7 @@ export default function App() {
     forecast_48h: true
   });
 
-  const API_BASE = 'https://sagar-netra-api.onrender.com';
+  const API_BASE = 'http://127.0.0.1:8000/api';
 
   // Load all global spill incidents and geometries on startup
   useEffect(() => {

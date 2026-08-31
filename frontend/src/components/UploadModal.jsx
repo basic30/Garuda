@@ -74,7 +74,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     formData.append('longitude', lon);
 
     try {
-      const response = await fetch('http://sagar-netra-api.onrender.com/api/detection/upload', {
+      const response = await fetch('http://127.0.0.1:8000/api/detection/upload', {
         method: 'POST',
         body: formData
       });
