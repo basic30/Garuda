@@ -318,7 +318,6 @@ export default function MapView({
     }
   }, [geometry, incident]);
 
-  // 5. Update Origin Zone Layer
   // 5. Update Origin Zone Layer & Fly Camera to Origin
   useEffect(() => {
     const map = mapRef.current;
@@ -357,6 +356,17 @@ export default function MapView({
         `, { permanent: true, direction: 'top' });
 
         originLayerRef.current.addLayer(originMarker);
+      }
+
+      // Auto-fit map viewport to frame both the origin zone polygon and incident centroid
+      if (map) {
+        const bounds = geoLayer.getBounds();
+        if (bounds && bounds.isValid()) {
+          if (incident?.centroid) {
+            bounds.extend(incident.centroid);
+          }
+          map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13, animate: true, duration: 1.5 });
+        }
       }
     }
   }, [originGeojson, layerToggles.origin, incident]);

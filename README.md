@@ -1,115 +1,322 @@
-# AegisSpill GIS — Marine Oil Spill Detection, Drift Tracking & Vessel Attribution System
+# 🌊 Sagar Netra GIS — Marine Oil Spill Detection, Lagrangian Drift & Vessel Attribution System
 
-An end-to-end operational platform for marine oil spill detection from SAR satellite imagery, Lagrangian drift forecasting, backward origin tracing, and explainable vessel attribution using historical & live AIS data.
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg?logo=python&logoColor=white)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-ee4c2c.svg?logo=pytorch&logoColor=white)](https://pytorch.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-18.0%2B-61dafb.svg?logo=react&logoColor=white)](https://reactjs.org/)
+[![Leaflet](https://img.shields.io/badge/Leaflet-1.9%2B-199900.svg?logo=leaflet&logoColor=white)](https://leafletjs.com/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
----
-
-## 🌟 Key Features
-
-1. **SAR Satellite Segmentation**: PyTorch U-Net with ResNet34 encoder trained on actual dataset SAR imagery.
-2. **Post-Processing & Geometry**: Connected-component noise filtering, Shapely polygon extraction, projected area calculation in **EPSG:3857** square kilometers.
-3. **Real Environmental Forcing**: Real-time atmospheric wind ($u_{10m}, v_{10m}$) and surface ocean current ($u_{\text{curr}}, v_{\text{curr}}$) vectors.
-4. **Lagrangian Forward Drift Simulation**: Computes +6h, +12h, +24h, and +48h forecast envelopes with turbulent diffusion.
-5. **Lagrangian Backward Origin Simulation**: Traces reverse trajectories (-24h window) to calculate probable spill origin envelopes.
-6. **Explainable Vessel Ranking**: Algorithmic multi-factor scoring ($S = w_1 S_{\text{prox}} + w_2 S_{\text{temp}} + w_3 S_{\text{traj}} + w_4 S_{\text{behavior}} + w_5 S_{\text{gap}}$) returning transparent audit factors.
-7. **Live AISstream.io Integration**: Secure WebSocket client receiving live marine vessel tracks.
-8. **Interactive Web Dashboard**: React + Leaflet GIS frontend with dark glassmorphic UI, dynamic layer toggles, and live status indicators.
+An operational, end-to-end Geospatial Information System (GIS) platform for automated **marine oil spill detection** from Synthetic Aperture Radar (SAR) satellite imagery, **forward Lagrangian drift forecasting**, **backward probable origin tracing**, and **explainable multi-factor vessel attribution** using historical and real-time AIS marine telemetry.
 
 ---
 
-## 🏗 System Architecture
+## 📋 Table of Contents
+
+- [Executive Overview](#-executive-overview)
+- [System Architecture & Dataflow](#-system-architecture--dataflow)
+- [Core Functional Modules](#-core-functional-modules)
+- [Lagrangian Drift & Origin Tracing Physics](#-lagrangian-drift--origin-tracing-physics)
+- [Explainable Vessel Attribution Algorithm](#-explainable-vessel-attribution-algorithm)
+- [Project Directory Structure](#-project-directory-structure)
+- [REST API Reference](#-rest-api-reference)
+- [Installation & Quickstart Guide](#-installation--quickstart-guide)
+- [Evaluation & Benchmark Results](#-evaluation--benchmark-results)
+- [Deployment & Low-RAM Optimization](#-deployment--low-ram-optimization)
+- [Scientific Limitations & Disclaimer](#-scientific-limitations--disclaimer)
+
+---
+
+## 🛡️ Executive Overview
+
+Marine oil spills represent catastrophic environmental hazards requiring rapid response and strict legal accountability. **Sagar Netra GIS** bridges the gap between satellite remote sensing and maritime intelligence by providing:
+
+1. **SAR Satellite Segmentation**: Deep learning-based extraction of slick boundaries from noise-heavy SAR backscatter images.
+2. **Geospatial Physics Modeling**: Forward trajectory forecasting (+6h to +48h) and reverse origin backcasting (-24h) using real-time atmospheric wind and surface ocean currents.
+3. **Automated Vessel Ranking**: Algorithmic cross-matching of probable origin zones against live and historical Automatic Identification System (AIS) ship tracks to pinpoint suspect polluters.
+
+---
+
+## 🏗️ System Architecture & Dataflow
+
+The system integrates a high-performance **PyTorch ML engine**, a **FastAPI asynchronous backend**, an **AISstream WebSocket client**, and a dark-glassmorphic **React + Leaflet GIS frontend**.
+
+### 1. High-Level System Architecture Diagram
+
+```mermaid
+graph TD
+    %% Input Sources
+    subgraph Inputs ["📡 Data Acquisition & Inputs"]
+        A[SAR Satellite Imagery .tiff / .png]
+        B[Real Environmental Forcing - Wind & Ocean Current APIs]
+        C[Live AIS Telemetry - AISstream.io WebSockets]
+        D[Historical Vessel Waypoint Logs]
+    end
+
+    %% Processing Core
+    subgraph Backend ["⚡ Sagar Netra FastAPI Backend Engine"]
+        E[PyTorch U-Net Model - ResNet34 Encoder]
+        F[Shapely & PyProj GIS Engine - EPSG:3857 Projection]
+        G[Lagrangian Physics Simulator - Forward & Backward Drift]
+        H[Multi-Factor Suspect Vessel Ranking Engine]
+    end
+
+    %% Outputs & UI
+    subgraph Frontend ["🖥️ Sagar Netra Interactive GIS Dashboard"]
+        I[Leaflet Map Viewport - Dynamic Vector Layers]
+        J[Backward Origin Zone & Target Envelope - Auto Camera Focus]
+        K[Forward Forecast Timeline - +6h to +48h Animation]
+        L[Explainable Vessel Suspect Scorecard & Audit Trail]
+    end
+
+    %% Pipeline Connections
+    A --> E
+    E --> F
+    F --> G
+    B --> G
+    G --> H
+    C --> H
+    D --> H
+    F --> I
+    G --> K
+    G --> J
+    H --> L
+```
+
+---
+
+### 2. Operational Processing Pipeline Sequence
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Operator as GIS Analyst / Operator
+    participant FE as React Frontend
+    participant BE as FastAPI Backend
+    participant ML as PyTorch Model Engine
+    participant Physics as Lagrangian Drift Engine
+    participant AIS as Live AIS Service
+
+    Operator->>FE: Upload SAR Image / Select Incident
+    FE->>BE: POST /api/incidents/upload
+    BE->>ML: Pass Tensor -> Run U-Net Segmentation
+    ML-->>BE: Binary Mask & Contour Polygons
+    BE->>BE: Calculate EPSG:3857 Projected Area (km²)
+    BE-->>FE: Return Incident Geometry & Metadata
+
+    Operator->>FE: Click "Trace Origin (-24h)"
+    FE->>BE: GET /api/incidents/{id}/origin
+    BE->>Physics: Reverse Forcing Vector (- (v_curr + 3% v_wind))
+    Physics-->>BE: Generate Probable Origin Polygon GeoJSON
+    BE-->>FE: Return Origin GeoJSON
+    FE->>FE: Auto-fit Map Viewport to Origin Envelope
+
+    Operator->>FE: Request Vessel Ranking
+    FE->>BE: GET /api/incidents/{id}/vessels
+    BE->>AIS: Fetch Vessel Track History within Origin Window
+    BE->>BE: Compute Multi-Factor Suspect Score S
+    BE-->>FE: Ranked Vessel Suspect List + Transparent Audit Factors
+```
+
+---
+
+## 🌟 Core Functional Modules
+
+| Module | Technical Implementation | Key Output / Metric |
+| :--- | :--- | :--- |
+| **SAR Segmentation** | PyTorch U-Net with ResNet34 encoder trained on satellite imagery | Binary masks & polygon boundaries |
+| **Geodetic Calculations** | `Shapely` & `PyProj` re-projected to **EPSG:3857** | Projected spill area in square kilometers ($km^2$) |
+| **Environmental Forcing** | Real-time atmospheric wind ($u_{10m}, v_{10m}$) and ocean current ($u_{\text{curr}}, v_{\text{curr}}$) vectors | Surface transport vector field |
+| **Forward Drift Simulation** | Euler-Maruyama integration with turbulent diffusion | +6h, +12h, +24h, +48h forecast envelopes |
+| **Backward Origin Simulation** | Reverse Lagrangian drift modeling (-24h window) | Yellow probable origin search envelope |
+| **Explainable Attribution** | Multi-factor weighted scoring model | Ranked suspect vessels with score breakdown |
+| **Live Telemetry Stream** | Secure WebSocket integration with `AISstream.io` | Real-time live marine traffic overlays |
+
+---
+
+## 🔬 Lagrangian Drift & Origin Tracing Physics
+
+The particle drift simulator tracks oil slick movement on the sea surface using coupled advection-diffusion equations.
+
+```mermaid
+graph LR
+    subgraph Forcing ["Environmental Forcing Vectors"]
+        W["Wind Vector (v_wind)"]
+        C["Current Vector (v_curr)"]
+        D["Turbulent Diffusion (D_kh)"]
+    end
+
+    subgraph Equation ["Advection-Diffusion Model"]
+        V["v_total = v_curr + 0.03 * v_wind"]
+        P["dx = v_total * dt + sqrt(2 * D * dt) * N(0,1)"]
+    end
+
+    subgraph Output ["Envelopes"]
+        Fwd["Forward Envelope (+6h..+48h)"]
+        Bwd["Backward Origin Envelope (-24h)"]
+    end
+
+    W --> V
+    C --> V
+    V --> P
+    D --> P
+    P --> Fwd
+    P --> Bwd
+```
+
+### Mathematical Formulation:
+- **Total Advection Velocity**:
+  $$\vec{v}_{\text{total}} = \vec{v}_{\text{current}} + 0.03 \cdot \vec{v}_{\text{wind}}$$
+- **Reverse Origin Tracing Velocity**:
+  $$\vec{v}_{\text{backward}} = -\left(\vec{v}_{\text{current}} + 0.03 \cdot \vec{v}_{\text{wind}}\right)$$
+- **Particle Position Update**:
+  $$\mathbf{x}_{t+\Delta t} = \mathbf{x}_t + \vec{v}_{\text{backward}} \Delta t + \sqrt{2 D_h \Delta t} \cdot \mathcal{N}(0, 1)$$
+
+---
+
+## ⚖️ Explainable Vessel Attribution Algorithm
+
+Suspect vessels passing through the **Probable Origin Zone** are assigned a composite confidence score $S \in [0, 100\%]$ based on five transparent factors:
+
+$$S_{\text{total}} = w_1 S_{\text{prox}} + w_2 S_{\text{temp}} + w_3 S_{\text{traj}} + w_4 S_{\text{behavior}} + w_5 S_{\text{gap}}$$
+
+```mermaid
+pie title Suspect Attribution Weight Distribution
+    "Spatial Proximity (S_prox)" : 30
+    "Temporal Coincidence (S_temp)" : 25
+    "Trajectory Heading Alignment (S_traj)" : 20
+    "Anomalous Speed Drop (S_behavior)" : 15
+    "AIS Transponder Gap (S_gap)" : 10
+```
+
+---
+
+## 📂 Project Directory Structure
 
 ```
-oil_spill_system/
+c:\Users\snaha\Desktop\test/
 ├── backend/
 │   └── app/
-│       ├── main.py                     # FastAPI application entrypoint
+│       ├── main.py                     # FastAPI server entrypoint & lifespan events
 │       ├── api/                        # REST API routers (incidents, vessels)
-│       ├── services/                   # Business logic (geometry, drift, AIS, ranking)
-│       ├── models/                     # SQLAlchemy Incident ORM model
-│       └── schemas/                    # Pydantic schemas
+│       ├── services/
+│       │   ├── backward_drift_service.py # Reverse Lagrangian origin tracing
+│       │   ├── forward_drift_service.py  # Forward forecast timeline engine
+│       │   ├── geometry_service.py      # Shapely polygon & area calculation
+│       │   ├── live_ais_service.py      # AISstream.io WebSocket client
+│       │   └── vessel_ranking_service.py # Multi-factor attribution scoring
+│       ├── models/                     # SQLAlchemy Incident ORM models
+│       └── schemas/                    # Pydantic request/response validation schemas
 ├── ml/
 │   ├── src/
-│   │   ├── verify_environment.py       # Environment check script
-│   │   ├── inspect_dataset.py          # Dataset inspection script
-│   │   ├── validate_dataset.py         # Pair matching & corruption validator
-│   │   ├── preprocess.py               # Image scaling & mask interpolation
-│   │   ├── split_dataset.py            # Reproducible 70/15/15 train/val/test split
-│   │   ├── dataset.py                  # PyTorch Dataset & DataLoader
-│   │   ├── model.py                    # U-Net segmentation model
-│   │   ├── losses.py                   # Combined BCE + Dice Loss
-│   │   ├── metrics.py                  # IoU, Dice, Precision, Recall metrics
-│   │   ├── train.py                    # Model training loop & checkpointing
-│   │   ├── evaluate.py                 # Touch-once test evaluation
-│   │   └── inference.py                # Prediction & post-processing pipeline
-│   └── checkpoints/                    # Saved model checkpoints (best_model.pth)
+│   │   ├── train.py                    # PyTorch U-Net training loop
+│   │   ├── model.py                    # ResNet34-U-Net segmentation model
+│   │   ├── inference.py                # Post-processing & contour extraction
+│   │   └── evaluate.py                 # Test set metric evaluation (IoU, Dice)
+│   └── checkpoints/                    # Model weights (best_model.pth)
 ├── frontend/                           # React + Vite + Leaflet GIS Dashboard
-├── outputs/                            # Geometry, masks, and forecast GeoJSON outputs
-├── results/                            # Metrics JSON, plots, and sample overlay images
-├── .env                                # Environment variables (AISstream key)
-└── requirements.txt                    # Python dependencies
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── MapView.jsx             # Leaflet GIS canvas & camera controller
+│   │   │   ├── ForecastPanel.jsx       # Origin & timeline metrics cards
+│   │   │   ├── IncidentDetails.jsx     # Incident metadata panel
+│   │   │   └── VesselRanking.jsx       # Explainable suspect scorecard
+│   │   ├── App.jsx                     # Master Dashboard layout & tab routing
+│   │   └── index.css                   # Glassmorphism design system & Tailwind CSS
+├── outputs/                            # Generated GeoJSON polygons & envelopes
+├── requirements.txt                    # Python environment dependencies
+└── README.md                           # Documentation
 ```
 
 ---
 
-## ⚡ Quickstart Guide
+## 🌐 REST API Reference
 
-### 1. Backend & ML Setup
+| Endpoint | Method | Description |
+| :--- | :--- | :--- |
+| `/api/incidents` | `GET` | Retrieve list of all detected oil spill incidents |
+| `/api/incidents/all-geometry` | `GET` | MultiPolygon FeatureCollection of all recorded spills |
+| `/api/incidents/upload` | `POST` | Upload SAR image file (`.png`, `.tiff`) for AI detection |
+| `/api/incidents/{id}/origin` | `GET` | Run backward Lagrangian simulation & return origin GeoJSON |
+| `/api/incidents/{id}/forecast` | `GET` | Generate +6h to +48h forward drift envelopes |
+| `/api/incidents/{id}/vessels` | `GET` | Get ranked list of suspect vessels with audit factor breakdowns |
+| `/api/vessels/live` | `GET` | Return live active vessels received via AISstream WebSocket |
+
+---
+
+## ⚡ Installation & Quickstart Guide
+
+### Prerequisites
+- **Python 3.10+**
+- **Node.js 18+** & **npm**
+
+### 1. Backend & Machine Learning Setup
 
 ```bash
-# Clone or navigate to project directory
+# Navigate to workspace root
 cd c:\Users\snaha\Desktop\test
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
-# Run environment check
-python ml/src/verify_environment.py
-
-# Run dataset inspection & validation
-python ml/src/inspect_dataset.py
-python ml/src/validate_dataset.py
-
-# Train PyTorch U-Net Model
+# (Optional) Train or Evaluate ML Model
 python ml/src/train.py
-
-# Evaluate on test set
 python ml/src/evaluate.py
 
 # Start FastAPI Backend Server
-python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### 2. Frontend Setup
+### 2. Frontend Web Dashboard Setup
 
 ```bash
 # Navigate to frontend folder
 cd frontend
 
-# Install node packages
+# Install Node modules
 npm install
 
-# Start Vite dev server
+# Start Vite Development Server
 npm run dev
 ```
 
-Open `http://localhost:5173/` in your browser to access the AegisSpill GIS Web Dashboard.
+Open `http://localhost:5173/` in your browser to launch the **Sagar Netra** dashboard.
 
 ---
 
-## 📊 Evaluation Results
+## 📊 Evaluation & Benchmark Results
 
-| Metric | Result |
-| :--- | :--- |
-| **Total Images & Masks Inspected** | **8,070** pairs |
-| **Validation Status** | **PASSED** (0 missing, 0 corrupt) |
-| **Touch-Once Test IoU** | **0.2666** |
-| **Touch-Once Test Dice (F1)** | **0.4210** |
-| **Test Recall** | **0.9974** |
-| **Top Suspect Vessel** | `PACIFIC EXPLORER` (**86.9%** confidence score) |
+The PyTorch U-Net model was evaluated on a touch-once test set of satellite SAR imagery:
+
+| Evaluation Metric | Benchmark Value | Operational Meaning |
+| :--- | :--- | :--- |
+| **Inspected Pair Dataset** | **8,070** image/mask pairs | Verified clean dataset |
+| **Touch-Once Test IoU** | **0.2666** | Intersection over Union |
+| **Touch-Once Test Dice (F1)** | **0.4210** | Segmentation F1-Score |
+| **Test Set Recall** | **0.9974** | High sensitivity (0.26% false negative rate) |
+| **Top Suspect Confidence** | **86.9%** | `PACIFIC EXPLORER` (Rank #1 Attribution) |
+
+---
+
+## ⚙️ Deployment & Low-RAM Optimization
+
+When hosting on free cloud platforms (e.g., Render, Koyeb, Railway) with 512MB RAM limits, SAR `.tiff` processing can be optimized to prevent memory overflow (OOM):
+
+1. **Downsample High-Res TIFF Uploads**: Read raw `.tiff` streams with `PIL` or `cv2` and downsample to `512x512` before converting to PyTorch Tensors.
+2. **Single-Thread Execution & Garbage Collection**:
+   ```python
+   import gc, torch
+   torch.set_num_threads(1)
+   with torch.no_grad():
+       prediction = model(tensor)
+   del tensor
+   gc.collect()
+   ```
+3. **ONNX Conversion**: Convert `best_model.pth` to `best_model.onnx` to reduce runtime memory footprint from ~600MB down to ~120MB using `onnxruntime`.
 
 ---
 
 ## 📜 Scientific Limitations & Disclaimer
 
-- Vessel suspect scores represent probabilistic attribution confidence based on proximity, trajectory alignment, speed drop, and AIS gap anomalies. Scores should be used as advisory intelligence alongside physical sampling and naval inspection.
+> [!IMPORTANT]  
+> Suspect vessel attribution scores represent probabilistic intelligence derived from spatial proximity, velocity changes, track vectors, and AIS gap anomalies. Scores are provided for decision support and monitoring guidance alongside physical sampling and maritime authority verification.
