@@ -11,6 +11,7 @@ from backend.app.services.environmental_service import fetch_environmental_forci
 from backend.app.services.forward_drift_service import run_forward_drift_simulation
 from backend.app.services.backward_drift_service import run_backward_drift_simulation
 from backend.app.services.vessel_ranking_service import rank_candidate_vessels
+from backend.app.services.location_service import is_in_ocean
 
 router = APIRouter(prefix="/incidents", tags=["Incidents"])
 
@@ -68,23 +69,23 @@ def _initialize_indian_ocean_incidents():
         return
 
     sample_images = [
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_2_palsar_1.png",
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_1_palsar_0.png",
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_3_palsar_10.png",
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_4_palsar_100.png",
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_5_palsar_1000.png",
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_6_palsar_1007.png",
-        "https://sagar-netra-api.onrender.com/results/dataset_samples/sample_7_palsar_1011.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_1_palsar_0.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_2_palsar_1.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_3_palsar_10.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_4_palsar_100.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_5_palsar_1000.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_6_palsar_1007.png",
+        "http://127.0.0.1:8000/results/dataset_samples/sample_7_palsar_1011.png",
     ]
 
     prediction_images = [
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_1_palsar_2828.png",
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_2_palsar_1625.png",
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_3_sentinel_192.png",
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_4_sentinel_2356.png",
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_5_palsar_269.png",
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_70_palsar_2417.png",
-        "https://sagar-netra-api.onrender.com/results/test_predictions/test_pred_79_palsar_801.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_2_palsar_1625.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_3_sentinel_192.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_4_sentinel_2356.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_5_palsar_269.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_70_palsar_2417.png",
+        "http://127.0.0.1:8000/results/test_predictions/test_pred_79_palsar_801.png",
     ]
 
     features = []
@@ -171,8 +172,17 @@ def _initialize_indian_ocean_incidents():
             seed_val += 1
             np.random.seed(seed_val)
 
-            lat = round(float(np.random.uniform(lat_min, lat_max)), 4)
-            lon = round(float(np.random.uniform(lon_min, lon_max)), 4)
+            # Enforce sampling strictly inside maritime ocean waters (No land spills)
+            attempts = 0
+            while True:
+                attempts += 1
+                lat = round(float(np.random.uniform(lat_min, lat_max)), 4)
+                lon = round(float(np.random.uniform(lon_min, lon_max)), 4)
+                if is_in_ocean(lat, lon):
+                    break
+                # Re-seed if stuck
+                np.random.seed(seed_val + attempts * 1000)
+
             length = round(float(np.random.uniform(3.5, 14.0)), 2)
             width = round(float(np.random.uniform(0.6, 2.8)), 2)
             angle = float(np.random.uniform(10, 170))

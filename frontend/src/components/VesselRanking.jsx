@@ -8,7 +8,7 @@ export default function VesselRanking({ vessels }) {
   const [fullDataset, setFullDataset] = useState([]);
   const [loadingDataset, setLoadingDataset] = useState(false);
 
-  const API_BASE = 'https://sagar-netra-api.onrender.com/api';
+  const API_BASE = 'http://127.0.0.1:8000/api';
 
   // Fetch full AIS dataset when user switches to 'full_dataset' tab or searches
   useEffect(() => {

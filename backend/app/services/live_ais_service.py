@@ -13,53 +13,13 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
+from backend.app.services.location_service import is_in_ocean
+
 # Cache for latest live vessel positions
 LIVE_VESSELS_CACHE = {}
 DYNAMIC_VESSELS_STATE = {}
 LAST_UPDATE_TIMESTAMP = time.time()
 CONNECTION_STATUS = {"connected": True, "last_message": _now_iso(), "vessel_count": 0}
-
-def is_in_ocean(lat, lon):
-    """
-    Returns True if coordinates are strictly in maritime ocean waters,
-    filtering out Indian subcontinent, Sri Lanka, and Asian land masses using exact shoreline equations.
-    """
-    # India West Coast Shoreline (Cape Comorin -> Goa -> Mumbai -> Gujarat)
-    if 8.0 <= lat <= 22.0 and lon < 77.5:
-        west_coast_lon = 77.5 - (lat - 8.0) * (4.7 / 14.0)
-        if lon >= west_coast_lon:
-            return False
-
-    # India East Coast Shoreline (Cape Comorin -> Chennai -> Vizag -> Kolkata)
-    if 8.0 <= lat < 13.0 and lon >= 77.5:
-        east_coast_lon = 77.5 + (lat - 8.0) * (2.8 / 5.0)
-        if lon <= east_coast_lon:
-            return False
-
-    if 13.0 <= lat <= 22.0 and lon >= 80.3:
-        east_coast_lon = 80.3 + (lat - 13.0) * (6.0 / 9.0)
-        if lon <= east_coast_lon:
-            return False
-
-    # North India Land Mass
-    if lat > 22.0 and 68.5 <= lon <= 89.0:
-        return False
-
-    # Sri Lanka Island
-    if 5.7 <= lat <= 9.9 and 79.5 <= lon <= 81.9:
-        return False
-
-    # Sumatra & Malay Peninsula
-    if -5.0 <= lat <= 5.5 and 95.5 <= lon <= 104.0:
-        if 1.2 <= lat <= 4.2 and 98.8 <= lon <= 101.2:
-            return True
-        return False
-
-    # Oman & UAE Land Mass
-    if lat >= 22.5 and lon <= 59.5:
-        return False
-
-    return True
 
 MASTER_INDIAN_OCEAN_VESSELS = [
     {"mmsi": "419001280", "vessel_name": "MV DESH SHANTI", "ship_type": "Crude Oil Tanker", "lat": 18.82, "lon": 71.25, "speed_knots": 12.4, "course": 165},

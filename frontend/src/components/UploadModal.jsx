@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Upload, X, CheckCircle2, AlertCircle, FileImage, Loader2, Compass } from 'lucide-react';
 
 export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
@@ -10,6 +10,33 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   const [hasMetadata, setHasMetadata] = useState(false);
   const [isValidSar, setIsValidSar] = useState(true);
   const [error, setError] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const resetFormState = () => {
+    setSelectedFile(null);
+    setLat('1.2800');
+    setLon('103.8500');
+    setUploading(false);
+    setExtracting(false);
+    setHasMetadata(false);
+    setIsValidSar(true);
+    setError(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  // Automatically reset modal state whenever it is opened
+  useEffect(() => {
+    if (isOpen) {
+      resetFormState();
+    }
+  }, [isOpen]);
+
+  const handleClose = () => {
+    resetFormState();
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -27,7 +54,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       metaData.append('file', file);
 
       try {
-        const res = await fetch('https://sagar-netra-api.onrender.com/api/detection/extract-metadata', {
+        const res = await fetch('http://127.0.0.1:8000/api/detection/extract-metadata', {
           method: 'POST',
           body: metaData
         });
@@ -74,7 +101,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     formData.append('longitude', lon);
 
     try {
-      const response = await fetch('https://sagar-netra-api.onrender.com/api/detection/upload', {
+      const response = await fetch('http://127.0.0.1:8000/api/detection/upload', {
         method: 'POST',
         body: formData
       });
@@ -87,6 +114,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
 
       setUploading(false);
       onUploadSuccess(data);
+      resetFormState();
       onClose();
     } catch (err) {
       setUploading(false);
@@ -103,7 +131,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
             Upload Custom SAR Satellite Image
           </h3>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -114,6 +142,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
           {/* File Dropzone */}
           <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500/70 rounded-xl p-6 text-center transition-colors bg-slate-900/50 cursor-pointer">
             <input
+              ref={fileInputRef}
               type="file"
               accept=".png,.jpg,.jpeg,.tif,.tiff,.bmp"
               onChange={handleFileChange}
@@ -123,16 +152,29 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
             <label htmlFor="sar-file-input" className="cursor-pointer block space-y-2">
               <FileImage className="w-10 h-10 text-cyan-400 mx-auto" />
               {selectedFile ? (
-                <div className="max-w-full overflow-hidden px-2">
-                  <div
-                    className="text-sm font-semibold text-slate-200 truncate max-w-full"
-                    title={selectedFile.name}
+                <div className="max-w-full overflow-hidden px-2 space-y-2">
+                  <div>
+                    <div
+                      className="text-sm font-semibold text-slate-200 truncate max-w-full"
+                      title={selectedFile.name}
+                    >
+                      {selectedFile.name}
+                    </div>
+                    <div className="text-xs text-slate-400 font-mono mt-0.5 font-medium">
+                      {(selectedFile.size / 1024).toFixed(1)} KB
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                      resetFormState();
+                    }}
+                    className="inline-flex items-center gap-1 text-xs text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 px-2.5 py-1 rounded-md transition-colors border border-rose-500/20 font-medium"
                   >
-                    {selectedFile.name}
-                  </div>
-                  <div className="text-xs text-slate-400 font-mono mt-0.5 font-medium">
-                    {(selectedFile.size / 1024).toFixed(1)} KB
-                  </div>
+                    <X className="w-3.5 h-3.5" /> Remove & Select Another Image
+                  </button>
                 </div>
               ) : (
                 <div>
@@ -201,7 +243,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
             >
               Cancel

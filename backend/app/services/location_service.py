@@ -30,6 +30,68 @@ def is_location_on_land(latitude: float, longitude: float) -> bool:
     return False
 
 
+def is_in_ocean(latitude: float, longitude: float) -> bool:
+    """
+    Returns True if coordinates are strictly in maritime ocean waters,
+    filtering out Indian subcontinent, Sri Lanka, Pakistan, Iran, Oman, and Asian land masses using global_land_mask.
+    """
+    lat, lon = float(latitude), float(longitude)
+
+    # 1. Primary check: High-resolution global_land_mask
+    try:
+        from global_land_mask import globe
+        if globe.is_land(lat, lon):
+            return False
+    except Exception as e:
+        print(f"global_land_mask check error in is_in_ocean: {e}", flush=True)
+
+    # 2. Mathematical shoreline boundary checks
+    if 8.0 <= lat <= 15.0 and lon < 77.5:
+        west_coast_lon = 77.5 - (lat - 8.0) * (3.7 / 7.0)
+        if lon >= west_coast_lon:
+            return False
+
+    if 15.0 < lat <= 20.0 and lon < 73.8:
+        west_coast_lon = 73.8 - (lat - 15.0) * (1.0 / 5.0)
+        if lon >= west_coast_lon:
+            return False
+
+    if 20.0 < lat <= 23.5 and 68.5 <= lon <= 73.5:
+        if lon >= 72.2 or (lat > 21.0 and lon >= 69.5 and lon <= 72.5):
+            return False
+
+    if 8.0 <= lat < 13.0 and lon >= 77.5:
+        east_coast_lon = 77.5 + (lat - 8.0) * (2.8 / 5.0)
+        if lon <= east_coast_lon:
+            return False
+
+    if 13.0 <= lat <= 21.8 and lon >= 80.3:
+        east_coast_lon = 80.3 + (lat - 13.0) * (7.9 / 8.8)
+        if lon <= east_coast_lon:
+            return False
+
+    if lat > 21.8 and 68.5 <= lon <= 89.0:
+        return False
+
+    if 24.0 <= lat <= 30.0 and 56.0 <= lon <= 68.5:
+        if lat >= 24.8:
+            return False
+
+    if 5.9 <= lat <= 9.8 and 79.6 <= lon <= 81.8:
+        return False
+
+    if -5.0 <= lat <= 5.5 and 95.5 <= lon <= 104.0:
+        if 1.2 <= lat <= 4.2 and 98.8 <= lon <= 101.2:
+            return True
+        return False
+
+    if lat >= 22.5 and lon <= 59.5:
+        return False
+
+    return True
+
+
+
 def _convert_exif_deg(value):
     """Helper to convert EXIF GPS coordinate tuple (degrees, minutes, seconds) to decimal degrees."""
     try:

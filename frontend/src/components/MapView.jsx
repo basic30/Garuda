@@ -145,16 +145,23 @@ export default function MapView({
     const map = L.map(mapContainerRef.current, {
       center: [14.0, 78.0],
       zoom: 5,
+      minZoom: 3,
       maxZoom: 20,
+      maxBounds: [[-85, -180], [85, 180]],
+      maxBoundsViscosity: 1.0,
+      worldCopyJump: true,
       zoomControl: false
     });
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
     const initialTile = L.tileLayer(BASEMAP_URLS[mapStyle] || BASEMAP_URLS.carto_voyager, {
+      minZoom: 3,
       maxZoom: 20,
       maxNativeZoom: mapStyle === 'satellite' ? 17 : 19,
       subdomains: 'abcd',
+      noWrap: true,
+      bounds: [[-85, -180], [85, 180]],
       attribution: BASEMAP_ATTRIBUTIONS[mapStyle] || BASEMAP_ATTRIBUTIONS.carto_voyager
     }).addTo(map);
 
@@ -263,9 +270,12 @@ export default function MapView({
     const attr = BASEMAP_ATTRIBUTIONS[mapStyle] || BASEMAP_ATTRIBUTIONS.carto_voyager;
 
     const newTile = L.tileLayer(url, {
+      minZoom: 3,
       maxZoom: 20,
       maxNativeZoom: mapStyle === 'satellite' ? 17 : 19,
       subdomains: 'abcd',
+      noWrap: true,
+      bounds: [[-85, -180], [85, 180]],
       attribution: attr
     }).addTo(map);
 
