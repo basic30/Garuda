@@ -1,37 +1,58 @@
 import os
+import functools
 import requests
 import numpy as np
 from PIL import Image, ExifTags
 
-def is_location_on_land(latitude: float, longitude: float) -> bool:
-    """
-    Checks if a (latitude, longitude) coordinate falls on land using global_land_mask
-    and Open-Meteo Elevation API fallback.
-    Returns True if location is on land, False if ocean/sea.
-    """
-    # Check 1: global_land_mask (dynamically imported to prevent IDE linter warnings)
-    try:
-        import importlib
-        glm_spec = importlib.util.find_spec("global_land_mask")
-        if glm_spec is not None:
-            globe_mod = importlib.import_module("global_land_mask.globe")
-            if globe_mod.is_land(latitude, longitude):
-                return True
-    except Exception as e:
-        print(f"global_land_mask check error: {e}", flush=True)
+try:
+    from global_land_mask import globe as _globe
+except ImportError:
+    _globe = None
 
-    # Check 2: Open-Meteo elevation API check (elevation > 2m above sea level is land)
-    try:
-        url = f"https://api.open-meteo.com/v1/elevation?latitude={latitude}&longitude={longitude}"
-        res = requests.get(url, timeout=4)
-        if res.status_code == 200:
-            elev = res.json().get("elevation", [0.0])[0]
-            if elev is not None and elev > 2.0:
-                return True
-    except Exception as e:
-        print(f"Open-Meteo elevation check error: {e}", flush=True)
+_OPEN_METEO_CONSECUTIVE_FAILURES = 0
+
+@functools.lru_cache(maxsize=16384)
+def _cached_is_location_on_land(rounded_lat: float, rounded_lon: float) -> bool:
+    global _OPEN_METEO_CONSECUTIVE_FAILURES
+
+    # Check 1: Primary offline check via global_land_mask (instant, 0ms, no network)
+    if _globe is not None:
+        try:
+            return bool(_globe.is_land(rounded_lat, rounded_lon))
+        except Exception:
+            pass
+
+    # Check 2: Open-Meteo elevation API check (if not failing repeatedly)
+    if _OPEN_METEO_CONSECUTIVE_FAILURES < 3:
+        try:
+            url = f"https://api.open-meteo.com/v1/elevation?latitude={rounded_lat}&longitude={rounded_lon}"
+            res = requests.get(url, timeout=1.2)
+            if res.status_code == 200:
+                _OPEN_METEO_CONSECUTIVE_FAILURES = 0
+                elev = res.json().get("elevation", [0.0])[0]
+                if elev is not None and elev > 2.0:
+                    return True
+                return False
+            else:
+                _OPEN_METEO_CONSECUTIVE_FAILURES += 1
+        except Exception as e:
+            _OPEN_METEO_CONSECUTIVE_FAILURES += 1
+            if _OPEN_METEO_CONSECUTIVE_FAILURES <= 2:
+                print(f"Open-Meteo elevation check notice (falling back to fast maritime coordinates): {e}", flush=True)
+
+    # Check 3: Deep interior land mass rough polygon fallback (India interior)
+    lat, lon = rounded_lat, rounded_lon
+    if 16.0 <= lat <= 28.0 and 75.0 <= lon <= 84.0:
+        return True
 
     return False
+
+def is_location_on_land(latitude: float, longitude: float) -> bool:
+    """
+    Checks if a (latitude, longitude) coordinate falls on land.
+    Uses global_land_mask (instant offline), cached results, and Open-Meteo fallback.
+    """
+    return _cached_is_location_on_land(round(float(latitude), 3), round(float(longitude), 3))
 
 
 def _convert_exif_deg(value):
@@ -279,16 +300,6 @@ def validate_sar_image_characteristics(file_path: str):
 def is_in_ocean(latitude: float, longitude: float) -> bool:
     """
     Returns True if coordinates are strictly in maritime ocean waters,
-    False if on land, using high-resolution global_land_mask (GSHHG 1-km global database).
+    False if on land, using high-resolution global_land_mask and cache.
     """
-    lat, lon = float(latitude), float(longitude)
-
-    # 1. Primary check: High-resolution global_land_mask
-    try:
-        from global_land_mask import globe
-        return not globe.is_land(lat, lon)
-    except Exception:
-        pass
-
-    # 2. Fallback check: is_location_on_land
-    return not is_location_on_land(lat, lon)
+    return not is_location_on_land(latitude, longitude)
