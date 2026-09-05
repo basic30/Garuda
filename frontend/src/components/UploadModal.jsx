@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, X, CheckCircle2, AlertCircle, FileImage, Loader2, Compass } from 'lucide-react';
+import { extractClientMetadata } from '../utils/sarMetadata';
 
 const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.origin.includes('5173') ? 'http://127.0.0.1:8000/api' : '/api');
 
 export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   const [selectedFile, setSelectedFile] = useState(null);
+  const [tempFileId, setTempFileId] = useState(null);
   const [lat, setLat] = useState('1.2800');
   const [lon, setLon] = useState('103.8500');
   const [imageTime, setImageTime] = useState(null);
@@ -14,9 +16,14 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   const [isValidSar, setIsValidSar] = useState(true);
   const [error, setError] = useState(null);
   const fileInputRef = useRef(null);
+  const abortControllerRef = useRef(null);
 
   const resetFormState = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
     setSelectedFile(null);
+    setTempFileId(null);
     setLat('1.2800');
     setLon('103.8500');
     setImageTime(null);
@@ -51,36 +58,78 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       setError(null);
       setHasMetadata(false);
       setIsValidSar(true);
+      setTempFileId(null);
 
-      // Auto-extract metadata & validate SAR image characteristics
+      // Abort previous extraction if user selected another file
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+      abortControllerRef.current = new AbortController();
+
+      // Step 1: Lightning-fast (<5ms) client-side metadata extraction directly from local file slice
       setExtracting(true);
-      const metaData = new FormData();
-      metaData.append('file', file);
 
       try {
-        const res = await fetch(`${API_BASE}/detection/extract-metadata`, {
-          method: 'POST',
-          body: metaData
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.is_valid_sar === false) {
-            setIsValidSar(false);
-            setError(data.sar_reason || 'Selected file is not a valid SAR satellite radar image.');
-          } else {
-            setIsValidSar(true);
-            if (data.has_metadata && data.latitude !== null && data.longitude !== null) {
-              setLat(data.latitude.toString());
-              setLon(data.longitude.toString());
-              setHasMetadata(true);
+        const clientMeta = await extractClientMetadata(file);
+
+        if (clientMeta.isValidSar === false) {
+          setIsValidSar(false);
+          setError(clientMeta.sarReason || 'Selected file is not a valid SAR satellite radar image.');
+          setExtracting(false);
+          return;
+        }
+
+        setIsValidSar(true);
+        if (clientMeta.hasMetadata && clientMeta.latitude !== null && clientMeta.longitude !== null) {
+          setLat(clientMeta.latitude.toString());
+          setLon(clientMeta.longitude.toString());
+          setHasMetadata(true);
+        }
+        if (clientMeta.imageTime) {
+          setImageTime(clientMeta.imageTime);
+        }
+        setExtracting(false);
+
+        // If client-side already extracted GPS metadata, no network transfer is needed!
+        if (clientMeta.hasMetadata) {
+          return;
+        }
+
+        // Step 2: Fallback to server ONLY for small files (<5MB) without client-detectable tags
+        if (file.size < 5 * 1024 * 1024) {
+          const metaData = new FormData();
+          metaData.append('file', file);
+
+          const res = await fetch(`${API_BASE}/detection/extract-metadata`, {
+            method: 'POST',
+            body: metaData,
+            signal: abortControllerRef.current.signal
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.temp_file_id) {
+              setTempFileId(data.temp_file_id);
             }
-            if (data.image_time) {
-              setImageTime(data.image_time);
+            if (data.is_valid_sar === false) {
+              setIsValidSar(false);
+              setError(data.sar_reason || 'Selected file is not a valid SAR satellite radar image.');
+            } else {
+              setIsValidSar(true);
+              if (data.has_metadata && data.latitude !== null && data.longitude !== null) {
+                setLat(data.latitude.toString());
+                setLon(data.longitude.toString());
+                setHasMetadata(true);
+              }
+              if (data.image_time) {
+                setImageTime(data.image_time);
+              }
             }
           }
         }
       } catch (err) {
-        console.warn('Metadata extraction failed:', err);
+        if (err.name !== 'AbortError') {
+          console.warn('Metadata extraction note:', err);
+        }
       } finally {
         setExtracting(false);
       }
@@ -99,11 +148,22 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       return;
     }
 
+    // Cancel background metadata check if still running to allocate 100% bandwidth to detection
+    if (extracting && abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      setExtracting(false);
+    }
+
     setUploading(true);
     setError(null);
 
     const formData = new FormData();
-    formData.append('file', selectedFile);
+    if (tempFileId) {
+      // Instant reuse: File already uploaded to server during metadata check
+      formData.append('temp_file_id', tempFileId);
+    } else {
+      formData.append('file', selectedFile);
+    }
     formData.append('latitude', lat);
     formData.append('longitude', lon);
 
@@ -203,7 +263,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
               )}
               {hasMetadata && !extracting && (
                 <span className="text-emerald-400 text-[11px] flex items-center gap-1 font-semibold">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Auto-detected from image metadata
+                  <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Auto-detected from image metadata (instant)
                 </span>
               )}
             </div>
@@ -257,7 +317,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
             </button>
             <button
               type="submit"
-              disabled={uploading || extracting || !isValidSar}
+              disabled={uploading || !isValidSar}
               className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                 !isValidSar
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'

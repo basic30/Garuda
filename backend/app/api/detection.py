@@ -29,7 +29,7 @@ async def extract_sar_image_metadata(file: UploadFile = File(...)):
     temp_path = os.path.join(upload_dir, temp_id)
 
     with open(temp_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+        shutil.copyfileobj(file.file, buffer, length=1024 * 1024)
 
     lat, lon, dt_iso, has_meta = extract_image_coordinates(temp_path)
     is_valid_sar, sar_reason = validate_sar_image_characteristics(temp_path)
@@ -85,7 +85,7 @@ async def upload_and_detect_sar_image(
             raise HTTPException(status_code=400, detail="Invalid image format. Supported formats: PNG, JPG, TIFF, BMP")
         file_path = os.path.join(upload_dir, f"upload_{timestamp_str}{file_ext}")
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            shutil.copyfileobj(file.file, buffer, length=1024 * 1024)
     else:
         # Fallback: check if any temp file exists in temp_uploads
         temp_files = sorted(os.listdir(temp_dir), reverse=True) if os.path.exists(temp_dir) else []

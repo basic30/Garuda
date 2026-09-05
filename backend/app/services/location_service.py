@@ -39,9 +39,30 @@ _SUMATRA_LAND = Polygon([
 
 _PREPARED_LAND_MASK = prep(MultiPolygon([_INDIA_LAND, _SRI_LANKA_LAND, _ARABIA_LAND, _MALAY_LAND, _SUMATRA_LAND]))
 
+_GLOBAL_LAND_MASK_MODULE = None
+
+def _get_global_land_mask():
+    """Lazy loader for global_land_mask to prevent memory allocation on cloud unless needed."""
+    global _GLOBAL_LAND_MASK_MODULE
+    if _GLOBAL_LAND_MASK_MODULE is False:
+        return None
+    if _GLOBAL_LAND_MASK_MODULE is not None:
+        return _GLOBAL_LAND_MASK_MODULE
+    try:
+        from global_land_mask import globe
+        _GLOBAL_LAND_MASK_MODULE = globe
+        return _GLOBAL_LAND_MASK_MODULE
+    except ImportError:
+        _GLOBAL_LAND_MASK_MODULE = False
+        return None
+
+_OPEN_METEO_FAILURES = 0
+
 @functools.lru_cache(maxsize=16384)
 def _cached_is_location_on_land(rounded_lat: float, rounded_lon: float) -> bool:
-    # 1. Instant offline polygon check (takes 0.000002s and only 3 KB RAM!)
+    global _OPEN_METEO_FAILURES
+
+    # Tier 1: Instant vector polygon check (0.000002s, 3.3 KB RAM) for primary maritime domain
     try:
         pt = Point(rounded_lon, rounded_lat)
         if _PREPARED_LAND_MASK.contains(pt):
@@ -49,10 +70,34 @@ def _cached_is_location_on_land(rounded_lat: float, rounded_lon: float) -> bool:
     except Exception:
         pass
 
-    # 2. Bounding box sanity checks for deep interior landmasses
+    # Bounding box sanity checks for deep interior Indian landmass
     lat, lon = rounded_lat, rounded_lon
     if 16.0 <= lat <= 28.0 and 75.0 <= lon <= 84.0:
         return True
+
+    # Tier 2: Full-resolution global_land_mask (when available, e.g. local PC environment)
+    globe = _get_global_land_mask()
+    if globe is not None:
+        try:
+            return bool(globe.is_land(lat, lon))
+        except Exception:
+            pass
+
+    # Tier 3: Open-Meteo Satellite Elevation API fallback for arbitrary global coordinates
+    if _OPEN_METEO_FAILURES < 2:
+        try:
+            url = f"https://api.open-meteo.com/v1/elevation?latitude={lat}&longitude={lon}"
+            res = requests.get(url, timeout=0.8)
+            if res.status_code == 200:
+                _OPEN_METEO_FAILURES = 0
+                elev = res.json().get("elevation", [0.0])[0]
+                if elev is not None and elev > 2.0:
+                    return True
+                return False
+            else:
+                _OPEN_METEO_FAILURES += 1
+        except Exception:
+            _OPEN_METEO_FAILURES += 1
 
     return False
 
