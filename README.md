@@ -25,7 +25,7 @@ An operational, end-to-end Geospatial Information System (GIS) platform for auto
 - [Deployment & Low-RAM Optimization](#-deployment--low-ram-optimization)
 - [Scientific Limitations & Disclaimer](#-scientific-limitations--disclaimer)
 
----
+----
 
 ## 🛡️ Executive Overview
 

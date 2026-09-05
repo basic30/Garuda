@@ -72,13 +72,24 @@ app.mount("/results", StaticFiles(directory="results"), name="results")
 app.mount("/data", StaticFiles(directory="data"), name="data")
 app.mount("/images", StaticFiles(directory="images"), name="images")
 
+def _run_aisstream_daemon(api_key):
+    import asyncio
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_until_complete(connect_to_aisstream(api_key))
+    except Exception as e:
+        print(f"AISstream background thread note: {e}", flush=True)
+
 @app.on_event("startup")
 async def startup_event():
     print("Starting FastAPI Backend Server...", flush=True)
     api_key = os.getenv("AISSTREAM_API_KEY", "de5c8707bb4ff474749f531e11a09a6b1e850200")
     if api_key:
         print(f"Initializing background AISstream listener with API Key: {api_key[:8]}...", flush=True)
-        asyncio.create_task(connect_to_aisstream(api_key))
+        import threading
+        t = threading.Thread(target=_run_aisstream_daemon, args=(api_key,), daemon=True)
+        t.start()
 
 @app.get("/")
 def root():
