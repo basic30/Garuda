@@ -12,8 +12,8 @@ def clamp_to_ocean(target_lat, target_lon, safe_lat, safe_lon, min_step_frac=0.1
     if is_in_ocean(t_lat, t_lon):
         return t_lat, t_lon
 
-    # Step back along vector towards safe ocean anchor with safety buffer (10 steps)
-    for frac in np.linspace(0.85, min_step_frac, 10):
+    # Step back along vector towards safe ocean anchor with fast 3-step convergence
+    for frac in (0.70, 0.35, min_step_frac):
         test_lat = round(float(safe_lat + (target_lat - safe_lat) * frac), 5)
         test_lon = round(float(safe_lon + (target_lon - safe_lon) * frac), 5)
         if is_in_ocean(test_lat, test_lon):
