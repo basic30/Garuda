@@ -129,6 +129,32 @@ async def upload_and_detect_sar_image(
 
     try:
         raw_img = cv2.imread(file_path, cv2.IMREAD_COLOR)
+
+        # Fallback to rasterio for TIFF / GeoTIFF files
+        if raw_img is None:
+            file_ext = os.path.splitext(file_path)[1].lower()
+            if file_ext in ('.tif', '.tiff'):
+                try:
+                    import rasterio
+                    with rasterio.open(file_path) as src:
+                        data = src.read(1, out_shape=(256, 256))
+                        if data is not None and data.size > 0:
+                            if data.dtype != np.uint8:
+                                data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                            raw_img = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
+                except Exception as ex:
+                    print(f"Rasterio preview extract notice: {ex}", flush=True)
+
+            if raw_img is None:
+                try:
+                    from PIL import Image
+                    Image.MAX_IMAGE_PIXELS = None
+                    with Image.open(file_path) as pimg:
+                        pimg.thumbnail((256, 256))
+                        raw_img = cv2.cvtColor(np.array(pimg.convert('RGB')), cv2.COLOR_RGB2BGR)
+                except Exception:
+                    pass
+
         if raw_img is not None:
             if raw_img.dtype != np.uint8:
                 raw_img = cv2.normalize(raw_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)

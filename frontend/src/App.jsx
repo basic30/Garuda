@@ -62,21 +62,46 @@ export default function App() {
       .catch(console.error);
   }, []);
 
-  // Poll Live AISstream vessels every 3 seconds
+  // Poll Live AISstream vessels gracefully (every 12s, with backoff on errors to prevent 429 Too Many Requests)
   useEffect(() => {
-    const fetchLive = () => {
-      fetch(`${API_BASE}/vessels/live`)
-        .then(res => res.json())
-        .then(data => {
-          setLiveVessels(data.vessels || []);
-          setLiveStatus(data.status || { connected: false });
-        })
-        .catch(() => setLiveStatus({ connected: false }));
+    let timerId = null;
+    let isMounted = true;
+    let delay = 10000;
+
+    const fetchLive = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/vessels/live`);
+        if (!res.ok) {
+          // If server returns 429 (Rate Limit) or 503 (Cold start / waking up), back off to 30s
+          delay = res.status === 429 ? 30000 : 20000;
+          if (isMounted) {
+            setLiveStatus({ connected: false });
+          }
+        } else {
+          const data = await res.json();
+          if (isMounted) {
+            setLiveVessels(data.vessels || []);
+            setLiveStatus(data.status || { connected: false });
+            delay = 12000; // restore normal 12s interval on success
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setLiveStatus({ connected: false });
+          delay = 25000; // back off when offline / sleeping
+        }
+      } finally {
+        if (isMounted) {
+          timerId = setTimeout(fetchLive, delay);
+        }
+      }
     };
 
     fetchLive();
-    const interval = setInterval(fetchLive, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+    };
   }, []);
 
   // Function to select an incident

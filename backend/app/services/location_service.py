@@ -199,24 +199,50 @@ def validate_sar_image_characteristics(file_path: str):
     Validates if an uploaded image file has valid SAR (Synthetic Aperture Radar) satellite image characteristics:
     - Grayscale / single-channel radar intensity profile (rejects standard color photos).
     - Non-blank / non-solid contrast variation.
-    Fast & memory efficient: uses downsampled thumbnail (max 512x512) for instant processing on large TIFFs.
+    Fast & memory efficient: uses downsampled thumbnail (max 512x512) directly during decode to prevent OOM.
     """
     import cv2
     try:
-        # Load image (supporting large GeoTIFFs, 16-bit SAR radar files, PNG/JPG)
-        img = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
-        if img is None:
-            # Fallback to PIL for specialized GeoTIFFs
+        ext = os.path.splitext(file_path)[1].lower()
+        img = None
+
+        # 1. Primary loader for TIFF / GeoTIFF: memory-safe sub-sampled read with rasterio
+        if ext in ('.tif', '.tiff'):
             try:
-                with Image.open(file_path) as pil_img:
-                    img = np.array(pil_img)
+                import rasterio
+                with rasterio.open(file_path) as src:
+                    target_h = min(512, max(16, src.height))
+                    target_w = min(512, max(16, src.width))
+                    data = src.read(1, out_shape=(target_h, target_w))
+                    if data is not None and data.size > 0:
+                        if data.dtype != np.uint8:
+                            data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                        img = data
+            except Exception as e:
+                print(f"Rasterio validation read notice: {e}", flush=True)
+
+        # 2. Try OpenCV for standard PNG/JPG or supported TIFFs
+        if img is None:
+            try:
+                img = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
             except Exception:
-                return False, "Unable to decode image file format."
+                pass
+
+        # 3. Fallback to PIL with memory protection
+        if img is None:
+            try:
+                from PIL import Image
+                Image.MAX_IMAGE_PIXELS = None
+                with Image.open(file_path) as pil_img:
+                    pil_img.thumbnail((512, 512))
+                    img = np.array(pil_img)
+            except Exception as e:
+                print(f"PIL validation read notice: {e}", flush=True)
 
         if img is None:
-            return False, "Unable to read image file data."
+            return False, "Unable to decode image file format. Please ensure the file is a valid SAR image or GeoTIFF."
 
-        # Downsample for lightning-fast contrast analysis if image is huge
+        # Downsample for lightning-fast contrast analysis if image is larger than 512px
         h, w = img.shape[:2]
         if max(h, w) > 512:
             scale = 512.0 / max(h, w)
@@ -225,7 +251,7 @@ def validate_sar_image_characteristics(file_path: str):
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         h, w = img.shape[:2]
-        if h < 16 or w < 16:
+        if h < 8 or w < 8:
             return False, "Image dimensions are too small to be a valid SAR satellite scene."
 
         # 1. Color distribution check (SAR satellite images are single-channel grayscale radar intensity)
@@ -233,14 +259,13 @@ def validate_sar_image_characteristics(file_path: str):
             b, g, r = cv2.split(img)
             diff_rg = float(np.mean(np.abs(r.astype(float) - g.astype(float))))
             diff_gb = float(np.mean(np.abs(g.astype(float) - b.astype(float))))
-            # Standard color photos, screenshots, wallpapers have color variation across RGB channels
-            if diff_rg > 3.0 or diff_gb > 3.0:
+            if diff_rg > 5.0 or diff_gb > 5.0:
                 return False, "Uploaded file is a standard color photo/image, not a grayscale SAR satellite radar scan. Please upload a valid SAR satellite image."
 
         # 2. Radar intensity & contrast variance check
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
         std_dev = float(np.std(gray))
-        if std_dev < 4.0:
+        if std_dev < 2.0:
             return False, "Invalid image: Uploaded file has no radar contrast (blank, dark, or solid color image)."
 
         return True, "Valid SAR satellite radar image format."
