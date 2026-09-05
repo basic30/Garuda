@@ -76,3 +76,25 @@
 .leaflet-marker-icon.live-vessel-svg-marker {
   transition: transform 1.2s ease-out !important;
 }
+
+/* Mobile-friendly safe area and touch scroll utilities */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .pb-safe {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+  }
+}
+
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Prevent accidental horizontal overflow across all containers */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* Touch target comfort */
+button, input, select {
+  touch-action: manipulation;
+}

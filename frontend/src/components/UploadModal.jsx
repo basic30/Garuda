@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, X, CheckCircle2, AlertCircle, FileImage, Loader2, Compass } from 'lucide-react';
 
+const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.origin.includes('5173') ? 'http://127.0.0.1:8000/api' : '/api');
+
 export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [lat, setLat] = useState('1.2800');
   const [lon, setLon] = useState('103.8500');
+  const [imageTime, setImageTime] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [hasMetadata, setHasMetadata] = useState(false);
@@ -16,6 +19,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     setSelectedFile(null);
     setLat('1.2800');
     setLon('103.8500');
+    setImageTime(null);
     setUploading(false);
     setExtracting(false);
     setHasMetadata(false);
@@ -54,7 +58,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       metaData.append('file', file);
 
       try {
-        const res = await fetch('http://127.0.0.1:8000/api/detection/extract-metadata', {
+        const res = await fetch(`${API_BASE}/detection/extract-metadata`, {
           method: 'POST',
           body: metaData
         });
@@ -69,6 +73,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
               setLat(data.latitude.toString());
               setLon(data.longitude.toString());
               setHasMetadata(true);
+            }
+            if (data.image_time) {
+              setImageTime(data.image_time);
             }
           }
         }
@@ -101,7 +108,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     formData.append('longitude', lon);
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/api/detection/upload', {
+      const response = await fetch(`${API_BASE}/detection/upload`, {
         method: 'POST',
         body: formData
       });
@@ -123,12 +130,12 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-      <div className="glass-panel w-full max-w-lg p-6 rounded-2xl border border-slate-700 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-3 sm:p-4">
+      <div className="glass-panel w-full max-w-lg p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-slate-700 shadow-2xl space-y-4 sm:space-y-5 max-h-[90vh] overflow-y-auto touch-scroll animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <Upload className="w-5 h-5 text-cyan-400" />
-            Upload Custom SAR Satellite Image
+          <h3 className="text-base sm:text-lg font-bold text-slate-100 flex items-center gap-2">
+            <Upload className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 shrink-0" />
+            <span>Upload SAR Satellite Image</span>
           </h3>
           <button
             onClick={handleClose}
@@ -138,9 +145,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-3.5 sm:space-y-4">
           {/* File Dropzone */}
-          <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500/70 rounded-xl p-6 text-center transition-colors bg-slate-900/50 cursor-pointer">
+          <div className="border-2 border-dashed border-slate-700 hover:border-cyan-500/70 rounded-xl p-4 sm:p-6 text-center transition-colors bg-slate-900/50 cursor-pointer">
             <input
               ref={fileInputRef}
               type="file"
@@ -150,7 +157,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
               id="sar-file-input"
             />
             <label htmlFor="sar-file-input" className="cursor-pointer block space-y-2">
-              <FileImage className="w-10 h-10 text-cyan-400 mx-auto" />
+              <FileImage className="w-8 h-8 sm:w-10 sm:h-10 text-cyan-400 mx-auto" />
               {selectedFile ? (
                 <div className="max-w-full overflow-hidden px-2 space-y-2">
                   <div>
@@ -178,8 +185,8 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                 </div>
               ) : (
                 <div>
-                  <div className="text-sm font-medium text-slate-200">Click to select or drag SAR image file</div>
-                  <div className="text-xs text-slate-400 font-mono mt-1">Supports PNG, JPG, TIFF, BMP</div>
+                  <div className="text-xs sm:text-sm font-medium text-slate-200">Click to select or drag SAR image file</div>
+                  <div className="text-[11px] sm:text-xs text-slate-400 font-mono mt-1">Supports PNG, JPG, TIFF, BMP</div>
                 </div>
               )}
             </label>
@@ -201,9 +208,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 font-mono text-xs">
               <div>
-                <label className="block text-slate-400 mb-1">Target Latitude (°N)</label>
+                <label className="block text-slate-400 mb-1 text-[11px]">Target Latitude (°N)</label>
                 <input
                   type="number"
                   step="any"
@@ -212,12 +219,12 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                     setLat(e.target.value);
                     setHasMetadata(false);
                   }}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 sm:px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
                   required
                 />
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">Target Longitude (°E)</label>
+                <label className="block text-slate-400 mb-1 text-[11px]">Target Longitude (°E)</label>
                 <input
                   type="number"
                   step="any"
@@ -226,7 +233,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                     setLon(e.target.value);
                     setHasMetadata(false);
                   }}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 sm:px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
                   required
                 />
               </div>
@@ -240,18 +247,18 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+          <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2 sm:gap-3 pt-3 border-t border-slate-800">
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+              className="w-full sm:w-auto px-4 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800 transition-colors text-center"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={uploading || extracting || !isValidSar}
-              className={`px-5 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${
+              className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                 !isValidSar
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                   : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg hover:from-cyan-500 hover:to-blue-500'

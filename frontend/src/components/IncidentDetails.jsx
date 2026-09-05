@@ -11,12 +11,24 @@ export default function IncidentDetails({
   isForwardLoading,
   isOriginLoading
 }) {
+  const resolveImageUrl = (url) => {
+    const backendHost = (import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.origin.includes('5173') ? 'http://127.0.0.1:8000/api' : '/api')).replace(/\/api\/?$/, '');
+    if (!url) return `${backendHost}/results/dataset_samples/sample_1_palsar_0.png`;
+    if (url.startsWith('http://127.0.0.1:8000') || url.startsWith('http://localhost:8000')) {
+      return url.replace(/^http:\/\/(127\.0\.0\.1|localhost):8000/, backendHost);
+    }
+    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+      return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
+    }
+    return url;
+  };
+
   return (
-    <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-5">
+    <div className="glass-panel p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-800 space-y-4 sm:space-y-5">
       {/* Incident Header & Selector */}
-      <div className="flex items-start justify-between border-b border-slate-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-slate-800 pb-3 sm:pb-4">
+        <div className="w-full sm:w-auto">
+          <div className="flex items-center gap-2 mb-1.5">
             <span className="px-2.5 py-0.5 rounded-md bg-red-500/20 text-red-400 border border-red-500/30 text-xs font-semibold uppercase">
               {incident?.status || 'Active Incident'}
             </span>
@@ -28,7 +40,7 @@ export default function IncidentDetails({
             <select
               value={incident?.incident_id || ''}
               onChange={(e) => onSelectIncident(e.target.value)}
-              className="bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-500 max-w-[280px]"
+              className="w-full sm:max-w-[280px] bg-slate-900 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-2 sm:py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer"
             >
               {allIncidents.map(inc => (
                 <option key={inc.incident_id} value={inc.incident_id}>
@@ -41,42 +53,42 @@ export default function IncidentDetails({
           )}
         </div>
 
-        {/* Upload Custom SAR Button */}
-        <button
-          onClick={onOpenUploadModal}
-          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold shadow-md flex items-center gap-1.5 transition-all shrink-0"
-        >
-          <Upload className="w-3.5 h-3.5" />
-          Upload SAR
-        </button>
+        <div className="flex items-center sm:self-start">
+          <button
+            onClick={onOpenUploadModal}
+            className="w-full sm:w-auto justify-center px-3.5 py-2 sm:py-1.5 rounded-lg bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 border border-cyan-500/30 text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload SAR Image</span>
+          </button>
+        </div>
       </div>
 
-      {/* Geometry Key Stats */}
-      <div className="grid grid-cols-3 gap-2.5 font-mono text-xs">
+      {/* Incident Metrics Summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 font-mono text-xs">
         <div className="glass-card p-3 rounded-xl border border-slate-800">
-          <div className="text-slate-400 mb-1 flex items-center gap-1">
-            <Maximize2 className="w-3.5 h-3.5 text-cyan-400" />
-            Spill Area
+          <div className="text-slate-400 text-[11px] mb-1 flex items-center gap-1">
+            <MapPin className="w-3.5 h-3.5 text-orange-400 shrink-0" /> Centroid GPS
           </div>
-          <div className="text-slate-100 text-sm font-bold">{incident?.spill_area_sqkm || 2.45} km²</div>
-        </div>
-
-        <div className="glass-card p-3 rounded-xl border border-slate-800">
-          <div className="text-slate-400 mb-1 flex items-center gap-1">
-            <MapPin className="w-3.5 h-3.5 text-yellow-400" />
-            Centroid
-          </div>
-          <div className="text-slate-100 text-[11px] font-semibold truncate">
-            {incident?.centroid ? `${incident.centroid[0].toFixed(3)}°, ${incident.centroid[1].toFixed(3)}°` : '5.850°, 80.500°'}
+          <div className="text-slate-100 font-semibold truncate">
+            {incident?.centroid ? `${incident.centroid[0].toFixed(4)}°, ${incident.centroid[1].toFixed(4)}°` : '5.8500°, 80.5000°'}
           </div>
         </div>
 
         <div className="glass-card p-3 rounded-xl border border-slate-800">
-          <div className="text-slate-400 mb-1 flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-purple-400" />
-            Confidence
+          <div className="text-slate-400 text-[11px] mb-1 flex items-center gap-1">
+            <Maximize2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> Spill Area
           </div>
-          <div className="text-emerald-400 text-xs font-bold">
+          <div className="text-cyan-400 font-bold text-sm">
+            {incident?.spill_area_sqkm ? `${incident.spill_area_sqkm} km²` : '2.450 km²'}
+          </div>
+        </div>
+
+        <div className="glass-card p-3 rounded-xl border border-slate-800">
+          <div className="text-slate-400 text-[11px] mb-1 flex items-center gap-1">
+            <Layers className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> Confidence
+          </div>
+          <div className="text-emerald-400 font-bold text-sm">
             {incident?.confidence ? `${(incident.confidence * 100).toFixed(1)}%` : '96.5%'}
           </div>
         </div>
@@ -87,12 +99,12 @@ export default function IncidentDetails({
         <div className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
           Lagrangian Physics Simulation Engine
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {/* Run Forward Simulation Button */}
           <button
             onClick={onRunForwardDrift}
             disabled={isForwardLoading}
-            className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+            className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-semibold shadow-lg flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 min-h-[42px]"
           >
             {isForwardLoading ? (
               <Loader2 className="w-4 h-4 animate-spin text-purple-200" />
@@ -106,7 +118,7 @@ export default function IncidentDetails({
           <button
             onClick={onRunBackwardOrigin}
             disabled={isOriginLoading}
-            className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold shadow-lg flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+            className="px-3 py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white text-xs font-semibold shadow-lg flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 min-h-[42px]"
           >
             {isOriginLoading ? (
               <Loader2 className="w-4 h-4 animate-spin text-amber-200" />
@@ -125,21 +137,21 @@ export default function IncidentDetails({
           SAR Satellite Imagery & U-Net Predictions
         </h4>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="glass-card p-2 rounded-xl border border-slate-800">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="glass-card p-2 sm:p-2.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-mono text-slate-400 mb-2 flex items-center justify-between">
               <span>SAR Input Image</span>
               <span className="text-emerald-400 font-semibold">256x256 uint8</span>
             </div>
             <img
-              src={incident?.sar_image_url || 'http://127.0.0.1:8000/results/dataset_samples/sample_1_palsar_0.png'}
+              src={resolveImageUrl(incident?.sar_image_url)}
               alt="SAR Satellite Input"
-              className="w-full h-auto rounded-lg border border-slate-700/60 object-cover"
+              className="w-full h-auto rounded-lg border border-slate-700/60 object-cover max-h-[260px] mx-auto"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </div>
 
-          <div className="glass-card p-2 rounded-xl border border-slate-800">
+          <div className="glass-card p-2 sm:p-2.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-mono text-slate-400 mb-2 flex items-center justify-between">
               <span>U-Net Mask Prediction</span>
               <span className="text-cyan-400 font-semibold">
@@ -147,9 +159,9 @@ export default function IncidentDetails({
               </span>
             </div>
             <img
-              src={incident?.prediction_image_url || 'http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png'}
+              src={resolveImageUrl(incident?.prediction_image_url)}
               alt="U-Net Mask Prediction Overlay"
-              className="w-full h-auto rounded-lg border border-slate-700/60 object-cover"
+              className="w-full h-auto rounded-lg border border-slate-700/60 object-cover max-h-[260px] mx-auto"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
           </div>

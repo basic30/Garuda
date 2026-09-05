@@ -68,24 +68,26 @@ def _initialize_indian_ocean_incidents():
     if GLOBAL_INCIDENTS_CACHE:
         return
 
+    base_url = os.getenv("BASE_URL", "").rstrip("/")
+
     sample_images = [
-        "http://127.0.0.1:8000/results/dataset_samples/sample_1_palsar_0.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_2_palsar_1.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_3_palsar_10.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_4_palsar_100.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_5_palsar_1000.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_6_palsar_1007.png",
-        "http://127.0.0.1:8000/results/dataset_samples/sample_7_palsar_1011.png",
+        f"{base_url}/results/dataset_samples/sample_1_palsar_0.png" if base_url else "/results/dataset_samples/sample_1_palsar_0.png",
+        f"{base_url}/results/dataset_samples/sample_2_palsar_1.png" if base_url else "/results/dataset_samples/sample_2_palsar_1.png",
+        f"{base_url}/results/dataset_samples/sample_3_palsar_10.png" if base_url else "/results/dataset_samples/sample_3_palsar_10.png",
+        f"{base_url}/results/dataset_samples/sample_4_palsar_100.png" if base_url else "/results/dataset_samples/sample_4_palsar_100.png",
+        f"{base_url}/results/dataset_samples/sample_5_palsar_1000.png" if base_url else "/results/dataset_samples/sample_5_palsar_1000.png",
+        f"{base_url}/results/dataset_samples/sample_6_palsar_1007.png" if base_url else "/results/dataset_samples/sample_6_palsar_1007.png",
+        f"{base_url}/results/dataset_samples/sample_7_palsar_1011.png" if base_url else "/results/dataset_samples/sample_7_palsar_1011.png",
     ]
 
     prediction_images = [
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_1_palsar_2828.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_2_palsar_1625.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_3_sentinel_192.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_4_sentinel_2356.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_5_palsar_269.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_70_palsar_2417.png",
-        "http://127.0.0.1:8000/results/test_predictions/test_pred_79_palsar_801.png",
+        f"{base_url}/results/test_predictions/test_pred_1_palsar_2828.png" if base_url else "/results/test_predictions/test_pred_1_palsar_2828.png",
+        f"{base_url}/results/test_predictions/test_pred_2_palsar_1625.png" if base_url else "/results/test_predictions/test_pred_2_palsar_1625.png",
+        f"{base_url}/results/test_predictions/test_pred_3_sentinel_192.png" if base_url else "/results/test_predictions/test_pred_3_sentinel_192.png",
+        f"{base_url}/results/test_predictions/test_pred_4_sentinel_2356.png" if base_url else "/results/test_predictions/test_pred_4_sentinel_2356.png",
+        f"{base_url}/results/test_predictions/test_pred_5_palsar_269.png" if base_url else "/results/test_predictions/test_pred_5_palsar_269.png",
+        f"{base_url}/results/test_predictions/test_pred_70_palsar_2417.png" if base_url else "/results/test_predictions/test_pred_70_palsar_2417.png",
+        f"{base_url}/results/test_predictions/test_pred_79_palsar_801.png" if base_url else "/results/test_predictions/test_pred_79_palsar_801.png",
     ]
 
     features = []
@@ -99,6 +101,7 @@ def _initialize_indian_ocean_incidents():
         "incident_id": primary_id,
         "location_name": "Indian Ocean / Sri Lanka Tanker Route",
         "detection_time": "2026-08-30T06:00:00Z",
+        "spill_bearing_deg": 65.0,
         "source_image": "images/images/val/palsar_2828.png",
         "sar_image_url": sample_images[0],
         "prediction_image_url": prediction_images[0],
@@ -135,6 +138,7 @@ def _initialize_indian_ocean_incidents():
         "incident_id": sec_id,
         "location_name": "Arabian Sea / Mumbai High Platform",
         "detection_time": "2026-08-30T05:45:00Z",
+        "spill_bearing_deg": 30.0,
         "source_image": "sar_mumbai_high.png",
         "sar_image_url": sample_images[1 % len(sample_images)],
         "prediction_image_url": prediction_images[1 % len(prediction_images)],
@@ -180,9 +184,7 @@ def _initialize_indian_ocean_incidents():
                 lon = round(float(np.random.uniform(lon_min, lon_max)), 4)
                 if is_in_ocean(lat, lon):
                     break
-                # Re-seed if stuck
                 np.random.seed(seed_val + attempts * 1000)
-
             length = round(float(np.random.uniform(3.5, 14.0)), 2)
             width = round(float(np.random.uniform(0.6, 2.8)), 2)
             angle = float(np.random.uniform(10, 170))
@@ -199,6 +201,7 @@ def _initialize_indian_ocean_incidents():
                 "incident_id": inc_id,
                 "location_name": f"{sec['name']} (Sector {i+1})",
                 "detection_time": "2026-08-30T05:30:00Z",
+                "spill_bearing_deg": round(float(angle), 1),
                 "source_image": f"sar_io_scene_{seed_val}.png",
                 "sar_image_url": sample_images[s_idx],
                 "prediction_image_url": prediction_images[p_idx],
@@ -289,7 +292,19 @@ def get_incident_forecast(incident_id: str):
 def get_incident_candidate_vessels(incident_id: str):
     """Retrieve ranked suspect vessels with explainable score breakdown for selected incident."""
     inc = get_incident_details(incident_id)
-    ranked = rank_candidate_vessels((inc["centroid_lat"], inc["centroid_lon"]))
+    is_custom = incident_id.startswith("INC-UPLOAD")
+    if is_custom:
+        ranked = rank_candidate_vessels(
+            (inc["centroid_lat"], inc["centroid_lon"]),
+            origin_time_window=inc.get("detection_time"),
+            is_custom_upload=True
+        )
+    else:
+        ranked = rank_candidate_vessels(
+            (inc["centroid_lat"], inc["centroid_lon"]),
+            origin_time_window="2026-08-30T06:00:00Z",
+            is_custom_upload=False
+        )
     return {
         "incident_id": incident_id,
         "origin_centroid": inc["centroid"],

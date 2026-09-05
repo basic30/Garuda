@@ -19,33 +19,58 @@ app = FastAPI(
     description="End-to-end API for satellite SAR oil spill detection, drift forecasting, backward origin tracing, and explainable vessel ranking."
 )
 
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "*")
+allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()] if allowed_origins_env != "*" else ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": str(exc.detail)},
+        headers={"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*"}
+    )
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Invalid or unprocessable upload request payload.", "errors": str(exc)},
+        headers={"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*"}
+    )
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Internal server error: {str(exc)}"},
+        headers={"Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*"}
+    )
+
 app.include_router(incidents_router, prefix="/api")
 app.include_router(vessels_router, prefix="/api")
 app.include_router(detection_router, prefix="/api")
 
-# Serve outputs static directory
-if os.path.exists("outputs"):
-    app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+# Ensure static asset directories exist BEFORE mounting to avoid 404s
+for d in ["outputs", "outputs/previews", "outputs/masks", "results", "data", "images"]:
+    os.makedirs(d, exist_ok=True)
 
-# Serve results static directory
-if os.path.exists("results"):
-    app.mount("/results", StaticFiles(directory="results"), name="results")
-
-# Serve data static directory
-if os.path.exists("data"):
-    app.mount("/data", StaticFiles(directory="data"), name="data")
-
-# Serve images static directory
-if os.path.exists("images"):
-    app.mount("/images", StaticFiles(directory="images"), name="images")
+app.mount("/outputs", StaticFiles(directory="outputs"), name="outputs")
+app.mount("/results", StaticFiles(directory="results"), name="results")
+app.mount("/data", StaticFiles(directory="data"), name="data")
+app.mount("/images", StaticFiles(directory="images"), name="images")
 
 @app.on_event("startup")
 async def startup_event():

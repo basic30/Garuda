@@ -42,7 +42,7 @@ export default function App() {
     forecast_48h: true
   });
 
-  const API_BASE = 'http://127.0.0.1:8000/api';
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
   // Load all global spill incidents and geometries on startup
   useEffect(() => {
@@ -155,13 +155,29 @@ export default function App() {
     }
   };
 
+  // Invalidate map size whenever activeTab changes to map
+  useEffect(() => {
+    if (activeTab === 'map') {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab]);
+
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
       <Navbar liveStatus={liveStatus} activeTab={activeTab} setActiveTab={setActiveTab} />
 
-      <main className="flex-1 p-4 grid grid-cols-12 gap-4 max-w-[1920px] mx-auto w-full h-[calc(100vh-65px)] overflow-hidden">
-        {/* Left Side GIS Map (8 cols in 'map' tab, 7 cols in 'vessels' tab) */}
-        <div className={`${activeTab === 'map' ? 'col-span-8' : 'col-span-7'} flex flex-col gap-3 h-full overflow-hidden transition-all duration-300`}>
+      <main className="flex-1 max-w-[1920px] mx-auto w-full h-[calc(100vh-53px)] lg:h-[calc(100vh-65px)] overflow-hidden lg:p-4 lg:grid lg:grid-cols-12 lg:gap-4 pb-14 lg:pb-0">
+        {/* Left Side GIS Map (Desktop: 8 cols in 'map' tab, 7 cols in 'vessels' tab; Mobile: full screen when activeTab === 'map') */}
+        <div
+          className={`h-full flex-col gap-2 sm:gap-3 overflow-hidden transition-all duration-300 ${
+            activeTab === 'map' ? 'flex' : 'hidden lg:flex'
+          } ${
+            activeTab === 'vessels' ? 'lg:col-span-7' : 'lg:col-span-8'
+          } p-2 sm:p-3 lg:p-0`}
+        >
           <div className="flex-1 relative min-h-0">
             <MapView
               incident={selectedIncident}
@@ -181,48 +197,77 @@ export default function App() {
             />
           </div>
 
-          {/* Interactive Timeline Animation Slider (Only in 'map' tab) */}
-          {activeTab === 'map' && (
-            <div className="shrink-0">
-              <TimelineSlider
-                timelineHour={timelineHour}
-                setTimelineHour={setTimelineHour}
-                isPlaying={isPlaying}
-                setIsPlaying={setIsPlaying}
-                playbackSpeed={playbackSpeed}
-                setPlaybackSpeed={setPlaybackSpeed}
-                forecastData={forecastData}
-                originGeojson={originGeojson}
-                selectedIncident={selectedIncident}
-              />
-            </div>
-          )}
+          {/* Interactive Timeline Animation Slider */}
+          <div className="shrink-0">
+            <TimelineSlider
+              timelineHour={timelineHour}
+              setTimelineHour={setTimelineHour}
+              isPlaying={isPlaying}
+              setIsPlaying={setIsPlaying}
+              playbackSpeed={playbackSpeed}
+              setPlaybackSpeed={setPlaybackSpeed}
+              forecastData={forecastData}
+              originGeojson={originGeojson}
+              selectedIncident={selectedIncident}
+            />
+          </div>
         </div>
 
-        {/* Right Side Panel (4 cols in 'map' tab) */}
-        {activeTab === 'map' && (
-          <div className="col-span-4 flex flex-col gap-4 overflow-y-auto h-full pr-1.5 pb-6">
-            <IncidentDetails
-              incident={selectedIncident}
-              allIncidents={allIncidents}
-              onSelectIncident={selectIncident}
-              onRunForwardDrift={handleRunForwardDrift}
-              onRunBackwardOrigin={handleRunBackwardOrigin}
-              onOpenUploadModal={() => setIsUploadOpen(true)}
-              isForwardLoading={isForwardLoading}
-              isOriginLoading={isOriginLoading}
-            />
-            <ForecastPanel forecastData={forecastData} originGeojson={originGeojson} />
-            <VesselRanking vessels={vessels} />
-          </div>
-        )}
+        {/* Right Side Panels for Desktop (4 cols in 'map' tab) OR Mobile Dedicated Views */}
+        
+        {/* Mobile View: Dedicated Spill Info Tab */}
+        <div
+          className={`h-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 touch-scroll pb-16 ${
+            activeTab === 'incident' ? 'flex lg:hidden' : 'hidden'
+          }`}
+        >
+          <IncidentDetails
+            incident={selectedIncident}
+            allIncidents={allIncidents}
+            onSelectIncident={selectIncident}
+            onRunForwardDrift={handleRunForwardDrift}
+            onRunBackwardOrigin={handleRunBackwardOrigin}
+            onOpenUploadModal={() => setIsUploadOpen(true)}
+            isForwardLoading={isForwardLoading}
+            isOriginLoading={isOriginLoading}
+          />
+        </div>
 
-        {/* Dedicated Vessel Attribution & AIS Dataset Search Workstation (5 cols in 'vessels' tab) */}
-        {activeTab === 'vessels' && (
-          <div className="col-span-5 flex flex-col gap-4 overflow-y-auto h-full pr-1.5 pb-6">
-            <VesselRanking vessels={vessels} />
-          </div>
-        )}
+        {/* Mobile View: Dedicated Forecast Tab */}
+        <div
+          className={`h-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 touch-scroll pb-16 ${
+            activeTab === 'forecast' ? 'flex lg:hidden' : 'hidden'
+          }`}
+        >
+          <ForecastPanel forecastData={forecastData} originGeojson={originGeojson} />
+        </div>
+
+        {/* Desktop Right Column (when activeTab !== 'vessels') */}
+        <div
+          className={`hidden lg:flex lg:col-span-4 flex-col gap-4 overflow-y-auto h-full pr-1.5 pb-6`}
+        >
+          <IncidentDetails
+            incident={selectedIncident}
+            allIncidents={allIncidents}
+            onSelectIncident={selectIncident}
+            onRunForwardDrift={handleRunForwardDrift}
+            onRunBackwardOrigin={handleRunBackwardOrigin}
+            onOpenUploadModal={() => setIsUploadOpen(true)}
+            isForwardLoading={isForwardLoading}
+            isOriginLoading={isOriginLoading}
+          />
+          <ForecastPanel forecastData={forecastData} originGeojson={originGeojson} />
+          <VesselRanking vessels={vessels} />
+        </div>
+
+        {/* Vessels View: Full Vessel Ranking (Desktop 5 cols in 'vessels' tab, Mobile full screen in 'vessels' tab) */}
+        <div
+          className={`h-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 lg:p-0 lg:pr-1.5 lg:pb-6 touch-scroll pb-16 ${
+            activeTab === 'vessels' ? 'flex lg:col-span-5' : 'hidden'
+          }`}
+        >
+          <VesselRanking vessels={vessels} />
+        </div>
       </main>
 
       {/* Upload SAR Image Modal */}

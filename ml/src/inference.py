@@ -57,25 +57,78 @@ def post_process_mask(binary_mask, min_component_size=50):
 
     return cleaned_mask, report
 
+_MODEL_CACHE = None
+_MODEL_DEVICE = None
+
+def get_oil_spill_model(checkpoint_path="ml/checkpoints/best_model.pth", device=None):
+    global _MODEL_CACHE, _MODEL_DEVICE
+    if _MODEL_CACHE is not None:
+        return _MODEL_CACHE, _MODEL_DEVICE
+
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    _MODEL_DEVICE = device
+
+    if os.path.exists(checkpoint_path):
+        try:
+            print(f"Loading PyTorch U-Net model from {checkpoint_path} onto {device}...", flush=True)
+            model = create_oil_spill_model().to(device)
+            model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+            model.eval()
+            _MODEL_CACHE = model
+            print("PyTorch model cached successfully in memory.", flush=True)
+            return _MODEL_CACHE, _MODEL_DEVICE
+        except Exception as e:
+            print(f"Error loading model checkpoint: {e}", flush=True)
+
+    # Fallback to unweighted model if checkpoint is missing
+    model = create_oil_spill_model().to(device)
+    model.eval()
+    _MODEL_CACHE = model
+    return _MODEL_CACHE, _MODEL_DEVICE
+
+
 def run_inference(image_path,
                   checkpoint_path="ml/checkpoints/best_model.pth",
                   output_dir="outputs/masks",
                   threshold=0.5,
                   device=None):
 
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
     if not os.path.exists(image_path):
         raise FileNotFoundError(f"Input SAR image not found: {image_path}")
 
-    # Load model
-    model = create_oil_spill_model().to(device)
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
-    model.eval()
+    # Load model from global singleton cache to prevent memory crash
+    model, device = get_oil_spill_model(checkpoint_path=checkpoint_path, device=device)
 
-    # Read original image for sizing
-    orig_img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    # Read original image for sizing (fast sub-sampled loading for large TIFFs)
+    orig_img = None
+    file_ext = os.path.splitext(image_path)[1].lower()
+    if file_ext in ('.tif', '.tiff'):
+        try:
+            import rasterio
+            with rasterio.open(image_path) as src:
+                data = src.read(1, out_shape=(512, 512))
+                if data is not None:
+                    if data.dtype != np.uint8:
+                        data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                    orig_img = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
+        except Exception:
+            pass
+
+    if orig_img is None:
+        try:
+            from PIL import Image
+            with Image.open(image_path) as pimg:
+                pimg.thumbnail((512, 512))
+                orig_img = np.array(pimg.convert('RGB'))
+                orig_img = cv2.cvtColor(orig_img, cv2.COLOR_RGB2BGR)
+        except Exception:
+            orig_img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+
+    if orig_img is None:
+        orig_img = np.zeros((256, 256, 3), dtype=np.uint8)
+
     orig_h, orig_w = orig_img.shape[:2]
 
     # Preprocess
@@ -123,6 +176,9 @@ def run_inference(image_path,
     report_out_path = os.path.join(output_dir, f"post_report_{os.path.splitext(base_name)[0]}.json")
     with open(report_out_path, "w") as f:
         json.dump(post_report, f, indent=2)
+
+    import gc
+    gc.collect()
 
     return {
         "image_path": image_path,

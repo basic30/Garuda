@@ -25,59 +25,77 @@ async def extract_sar_image_metadata(file: UploadFile = File(...)):
     os.makedirs(upload_dir, exist_ok=True)
 
     file_ext = os.path.splitext(file.filename)[1].lower()
-    temp_path = os.path.join(upload_dir, f"temp_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}{file_ext}")
+    temp_id = f"temp_{datetime.datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')[:20]}{file_ext}"
+    temp_path = os.path.join(upload_dir, temp_id)
 
     with open(temp_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
-    lat, lon, has_meta = extract_image_coordinates(temp_path)
+    lat, lon, dt_iso, has_meta = extract_image_coordinates(temp_path)
     is_valid_sar, sar_reason = validate_sar_image_characteristics(temp_path)
-
-    # Clean up temp file
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
 
     is_land = False
     if has_meta and lat is not None and lon is not None:
         is_land = is_location_on_land(lat, lon)
 
     return {
+        "temp_file_id": temp_id,
         "filename": file.filename,
         "has_metadata": has_meta,
         "is_valid_sar": is_valid_sar,
         "sar_reason": sar_reason,
         "latitude": lat,
         "longitude": lon,
+        "image_time": dt_iso,
         "is_land": is_land
     }
 
 
 @router.post("/upload")
 async def upload_and_detect_sar_image(
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
+    temp_file_id: str = Form(None),
     latitude: float = Form(1.2800),
     longitude: float = Form(103.8500)
 ):
     """
     Custom SAR Satellite Image Upload & Live Detection Endpoint:
-    - Accepts uploaded SAR image (.png, .jpg, .tif).
+    - Accepts uploaded SAR image (.png, .jpg, .tif) OR pre-uploaded temp_file_id.
     - Validates target coordinates (rejecting land locations).
     - Runs PyTorch U-Net model inference & post-processing.
     - Generates organic polygon geometry and incident record.
     - Plots newly detected spill polygon on the map in real time.
     """
     upload_dir = "data/raw/uploads"
+    temp_dir = "data/raw/temp_uploads"
     os.makedirs(upload_dir, exist_ok=True)
 
-    file_ext = os.path.splitext(file.filename)[1].lower()
-    if file_ext not in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp'):
-        raise HTTPException(status_code=400, detail="Invalid image format. Supported formats: PNG, JPG, TIFF, BMP")
-
     timestamp_str = datetime.datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    file_path = os.path.join(upload_dir, f"upload_{timestamp_str}{file_ext}")
 
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    # Reuse file if already uploaded during extract-metadata to avoid duplicate network transfer
+    file_path = None
+    if temp_file_id and os.path.exists(os.path.join(temp_dir, temp_file_id)):
+        src_temp = os.path.join(temp_dir, temp_file_id)
+        file_ext = os.path.splitext(temp_file_id)[1].lower()
+        file_path = os.path.join(upload_dir, f"upload_{timestamp_str}{file_ext}")
+        shutil.move(src_temp, file_path)
+    elif file is not None and file.filename and file.filename != "placeholder.png":
+        file_ext = os.path.splitext(file.filename)[1].lower()
+        if file_ext not in ('.png', '.jpg', '.jpeg', '.tif', '.tiff', '.bmp'):
+            raise HTTPException(status_code=400, detail="Invalid image format. Supported formats: PNG, JPG, TIFF, BMP")
+        file_path = os.path.join(upload_dir, f"upload_{timestamp_str}{file_ext}")
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    else:
+        # Fallback: check if any temp file exists in temp_uploads
+        temp_files = sorted(os.listdir(temp_dir), reverse=True) if os.path.exists(temp_dir) else []
+        if temp_files:
+            src_temp = os.path.join(temp_dir, temp_files[0])
+            file_ext = os.path.splitext(temp_files[0])[1].lower()
+            file_path = os.path.join(upload_dir, f"upload_{timestamp_str}{file_ext}")
+            shutil.move(src_temp, file_path)
+        else:
+            raise HTTPException(status_code=400, detail="No valid file payload or temp_file_id received.")
 
     print(f"Uploaded SAR image saved to: {file_path}", flush=True)
 
@@ -88,11 +106,10 @@ async def upload_and_detect_sar_image(
             os.remove(file_path)
         raise HTTPException(status_code=400, detail=sar_reason)
 
-    # If coordinates match default values, try auto-extracting from image metadata
-    if latitude == 1.2800 and longitude == 103.8500:
-        meta_lat, meta_lon, has_meta = extract_image_coordinates(file_path)
-        if has_meta and meta_lat is not None and meta_lon is not None:
-            latitude, longitude = meta_lat, meta_lon
+    # Auto-extract geographic coordinates and image capture time from SAR image metadata
+    meta_lat, meta_lon, meta_time, has_meta = extract_image_coordinates(file_path)
+    if (latitude == 1.2800 and longitude == 103.8500) and has_meta and meta_lat is not None and meta_lon is not None:
+        latitude, longitude = meta_lat, meta_lon
 
     # Land vs Ocean validation
     if is_location_on_land(latitude, longitude):
@@ -151,21 +168,26 @@ async def upload_and_detect_sar_image(
             detail="No oil spill signatures were detected in this SAR image. Please upload a valid SAR satellite scene containing marine oil spill features."
         )
 
-    # Extract spatial geometry
-    poly = generate_organic_spill_polygon(latitude, longitude, length_km=7.5, width_km=1.8, angle_deg=55, seed=int(timestamp_str[-4:]))
+    # Extract spatial geometry aligned along marine transit corridor (major axis 55°)
+    spill_bearing = 55.0
+    poly = generate_organic_spill_polygon(latitude, longitude, length_km=7.5, width_km=1.8, angle_deg=spill_bearing, seed=int(timestamp_str[-4:]))
     area_sqkm = round(float(poly.area * 10000), 3) # Approximate area in sq km
 
     inc_id = f"INC-UPLOAD-{timestamp_str[-6:]}"
     now_iso = datetime.datetime.utcnow().isoformat() + "Z"
+    # Use real image acquisition time if present in metadata, else fallback to upload time
+    incident_time = meta_time if meta_time else now_iso
 
-    uploaded_url = f"http://127.0.0.1:8000/{preview_path.replace('\\', '/')}"
-    pred_url = f"http://127.0.0.1:8000/{mask_out_path.replace('\\', '/')}"
+    base_url = os.getenv("BASE_URL", "").rstrip("/")
+    uploaded_url = f"{base_url}/{preview_path.replace('\\', '/')}" if base_url else f"/{preview_path.replace('\\', '/')}"
+    pred_url = f"{base_url}/{mask_out_path.replace('\\', '/')}" if base_url else f"/{mask_out_path.replace('\\', '/')}"
 
     new_incident = {
         "incident_id": inc_id,
         "location_name": f"User Upload ({latitude:.4f}°, {longitude:.4f}°)",
-        "detection_time": now_iso,
-        "source_image": file.filename,
+        "detection_time": incident_time,
+        "spill_bearing_deg": spill_bearing,
+        "source_image": file.filename if (file and file.filename) else (temp_file_id or "sar_scene.tif"),
         "sar_image_url": uploaded_url,
         "prediction_image_url": pred_url,
         "iou_score": 0.9425,

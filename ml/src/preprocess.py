@@ -1,6 +1,8 @@
+import os
 import numpy as np
 import cv2
 import torch
+from PIL import Image
 
 def preprocess_sar_image(image_input, target_size=(256, 256)):
     """
@@ -12,10 +14,34 @@ def preprocess_sar_image(image_input, target_size=(256, 256)):
     - Returns PyTorch tensor (C, H, W) float32.
     """
     if isinstance(image_input, str):
-        img = cv2.imread(image_input, cv2.IMREAD_COLOR)
+        img = None
+        ext = os.path.splitext(image_input)[1].lower()
+        if ext in ('.tif', '.tiff'):
+            try:
+                import rasterio
+                with rasterio.open(image_input) as src:
+                    data = src.read(1, out_shape=target_size)
+                    if data is not None:
+                        if data.dtype != np.uint8:
+                            data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                        img = cv2.cvtColor(data, cv2.COLOR_GRAY2RGB)
+            except Exception:
+                pass
+
+        if img is None:
+            try:
+                from PIL import Image
+                with Image.open(image_input) as pimg:
+                    resample_mode = getattr(getattr(Image, 'Resampling', Image), 'BILINEAR', 2)
+                    pimg = pimg.resize(target_size, resample_mode)
+                    img = np.array(pimg.convert('RGB'))
+            except Exception:
+                img = cv2.imread(image_input, cv2.IMREAD_COLOR)
+                if img is not None:
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
         if img is None:
             raise ValueError(f"Unable to read image from path: {image_input}")
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     else:
         img = image_input.copy()
 

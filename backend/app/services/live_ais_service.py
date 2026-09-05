@@ -1,3 +1,4 @@
+from backend.app.services.location_service import is_in_ocean
 import os
 import sys
 import json
@@ -13,13 +14,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 def _now_iso():
     return datetime.now(timezone.utc).isoformat()
 
-from backend.app.services.location_service import is_in_ocean
-
 # Cache for latest live vessel positions
 LIVE_VESSELS_CACHE = {}
 DYNAMIC_VESSELS_STATE = {}
 LAST_UPDATE_TIMESTAMP = time.time()
 CONNECTION_STATUS = {"connected": True, "last_message": _now_iso(), "vessel_count": 0}
+
 
 MASTER_INDIAN_OCEAN_VESSELS = [
     {"mmsi": "419001280", "vessel_name": "MV DESH SHANTI", "ship_type": "Crude Oil Tanker", "lat": 18.82, "lon": 71.25, "speed_knots": 12.4, "course": 165},

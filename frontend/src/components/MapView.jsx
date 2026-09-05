@@ -20,13 +20,13 @@ const BASEMAP_ATTRIBUTIONS = {
 // SVG Ship Icon Generator
 const createVesselSvgIcon = (courseDeg, rankColor, isRank1, vesselName, rankNum) => {
   const rotation = (courseDeg || 0) - 90; // Align SVG bow pointing forward
-  const size = isRank1 ? 38 : 32;
+  const size = isRank1 ? 28 : 22;
   const half = size / 2;
 
   const svgHtml = `
     <div style="position:relative; width:${size}px; height:${size}px; display:flex; items-center; justify-center;">
-      ${isRank1 ? `<div style="position:absolute; inset:-4px; border-radius:50%; border:2px dashed ${rankColor}; opacity:0.8; animation:spin 8s linear infinite;"></div>` : ''}
-      <svg width="${size}" height="${size}" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 0 8px ${rankColor});">
+      ${isRank1 ? `<div style="position:absolute; inset:-3px; border-radius:50%; border:1.5px dashed ${rankColor}; opacity:0.8; animation:spin 8s linear infinite;"></div>` : ''}
+      <svg width="${size}" height="${size}" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 0 6px ${rankColor});">
         <!-- Ship Hull -->
         <path d="M 18 2 L 28 14 L 26 31 C 26 33.5 10 33.5 10 31 L 8 14 Z" fill="${rankColor}" stroke="#ffffff" stroke-width="1.8" stroke-linejoin="round"/>
         <!-- Deck Superstructure -->
@@ -39,21 +39,21 @@ const createVesselSvgIcon = (courseDeg, rankColor, isRank1, vesselName, rankNum)
       <!-- Rank Badge Overlay -->
       <span style="
         position: absolute;
-        top: -6px;
-        right: -6px;
+        top: -4px;
+        right: -4px;
         background: ${rankColor};
         color: #020617;
         font-family: monospace;
         font-weight: 800;
-        font-size: 10px;
-        width: 16px;
-        height: 16px;
+        font-size: 8px;
+        width: 13px;
+        height: 13px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
-        border: 1.5px solid #ffffff;
-        box-shadow: 0 0 6px rgba(0,0,0,0.6);
+        border: 1px solid #ffffff;
+        box-shadow: 0 0 4px rgba(0,0,0,0.6);
       ">#${rankNum}</span>
     </div>
   `;
@@ -116,8 +116,10 @@ export default function MapView({
   const mapRef = useRef(null);
   const tileLayerRef = useRef(null);
 
-  // Panel Minimize State
-  const [isPanelMinimized, setIsPanelMinimized] = useState(false);
+  // Panel Minimize State - minimized by default on mobile screens
+  const [isPanelMinimized, setIsPanelMinimized] = useState(() => {
+    return typeof window !== 'undefined' && window.innerWidth < 768;
+  });
 
   // GeoJSON Layer References
   const allSpillsLayerRef = useRef(null);
@@ -235,7 +237,27 @@ export default function MapView({
 
     mapRef.current = map;
 
+    // Fluid resize observer for mobile keyboard/orientation/tab switches
+    let resizeObserver = null;
+    if (window.ResizeObserver && mapContainerRef.current) {
+      resizeObserver = new ResizeObserver(() => {
+        map.invalidateSize();
+      });
+      resizeObserver.observe(mapContainerRef.current);
+    }
+
+    const handleResize = () => {
+      map.invalidateSize();
+    };
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
+
     return () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      }
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
       if (mapRef.current) {
         mapRef.current.remove();
         mapRef.current = null;
@@ -460,19 +482,19 @@ export default function MapView({
           const isRank1 = v.suspect_rank === 1;
           const pinColor = isRank1 ? '#f97316' : (v.suspect_rank === 2 ? '#eab308' : '#38bdf8');
 
-          // Dual-pass Glowing Polyline Track
-          // Outer Glow
+          // Bold, high-contrast and clearly visible maritime navigation tracks
+          // 1. Vibrant colored glow outline
           const glowLine = L.polyline(latLons, {
             color: pinColor,
-            weight: isRank1 ? 7 : 5,
-            opacity: 0.35
+            weight: isRank1 ? 6.5 : 4.5,
+            opacity: 0.45
           });
 
-          // Inner Dash Line
+          // 2. Bold bright core dashed line (Clearly visible on any dark satellite or street basemap)
           const trackLine = L.polyline(latLons, {
             color: '#ffffff',
-            weight: isRank1 ? 3 : 2,
-            dashArray: '8, 6',
+            weight: isRank1 ? 2.8 : 2.0,
+            dashArray: isRank1 ? '7, 5' : '5, 5',
             opacity: 0.95
           });
 
@@ -480,35 +502,46 @@ export default function MapView({
           vesselTracksLayerRef.current.addLayer(trackLine);
 
           // Calculate Interpolated Vessel Position along trajectory based on `timelineHour`
+          // Position vessels realistically along their transit route (vessels have sailed past or are approaching)
+          // NEVER freeze vessel #1 directly on top of the blue oil spill polygon!
           const totalWps = v.waypoints.length;
+          const wpStart = v.waypoints[0];
           const wpOrigin = v.waypoints[2] || v.waypoints[1];
           const wpEnd = v.waypoints[totalWps - 1];
 
-          // Compute interpolated lat/lon based on timeline hour (starting at wpOrigin at t=0)
-          const timeProgressFrac = Math.min(1.0, Math.max(0.0, timelineHour / 48.0));
-          const currentLat = wpOrigin.lat + (wpEnd.lat - wpOrigin.lat) * timeProgressFrac;
-          const currentLon = wpOrigin.lon + (wpEnd.lon - wpOrigin.lon) * timeProgressFrac;
+          // Natural transit staging: Rank 1 is ahead along its course (0.70), other vessels nearby in the corridor
+          const staggerFractions = [0.70, 0.35, 0.62, 0.42, 0.78];
+          const baseOffset = staggerFractions[(v.suspect_rank - 1) % staggerFractions.length];
+          const timeProgressFrac = (timelineHour / 48.0) * (1.0 - baseOffset);
+          const currentFrac = Math.min(0.98, Math.max(0.05, baseOffset + timeProgressFrac));
 
-          // Compute instantaneous heading course angle
-          const dLon = wpEnd.lon - wpOrigin.lon;
-          const dLat = wpEnd.lat - wpOrigin.lat;
+          const currentLat = wpStart.lat + (wpEnd.lat - wpStart.lat) * currentFrac;
+          const currentLon = wpStart.lon + (wpEnd.lon - wpStart.lon) * currentFrac;
+
+          // Compute instantaneous heading course angle along track
+          const dLon = wpEnd.lon - wpStart.lon;
+          const dLat = wpEnd.lat - wpStart.lat;
           const courseAngle = (Math.atan2(dLon, dLat) * 180 / Math.PI + 360) % 360;
 
-          // Add Rank #1 Origin Slick Intersection Marker
+          // Add Rank #1 Origin Slick Intersection Marker (sleek, compact)
           if (isRank1) {
+            const minDist = v.metrics?.min_distance_km !== undefined ? `${v.metrics.min_distance_km.toFixed(2)} km` : 'Near Origin';
+            const speedRed = v.metrics?.speed_drop_knots ? `${v.metrics.speed_drop_knots} kts` : 'None (Steady Speed)';
+            const aisGap = v.metrics?.ais_gap_minutes ? `${v.metrics.ais_gap_minutes} mins` : 'None (Continuous AIS)';
+
             const dischargeMarker = L.circleMarker([wpOrigin.lat, wpOrigin.lon], {
-              radius: 13,
+              radius: 9,
               color: '#f97316',
-              weight: 2.5,
-              dashArray: '4, 4',
+              weight: 2,
+              dashArray: '3, 3',
               fillColor: '#ea580c',
-              fillOpacity: 0.35
+              fillOpacity: 0.22
             }).bindTooltip(`
               <div style="font-family:sans-serif; padding:2px;">
                 <b style="color:#f97316;">RANK #1 DISCHARGE INTERSECTION</b><br/>
-                Slick Origin Proximity: <b>0.11 km</b><br/>
-                Speed Reduction: <b>14.5 → 5.8 kts</b><br/>
-                AIS Gap: <b>35 mins</b>
+                Slick Origin Proximity: <b>${minDist}</b><br/>
+                Speed Reduction: <b>${speedRed}</b><br/>
+                AIS Gap: <b>${aisGap}</b>
               </div>
             `, { permanent: false, direction: 'right' });
 
@@ -524,6 +557,7 @@ export default function MapView({
               <b style="color:${pinColor};">Rank #${v.suspect_rank}: ${v.vessel_name}</b><br/>
               <span style="font-size:11px; color:#cbd5e1;">Type: ${v.ship_type} | Flag: ${v.flag}</span><br/>
               <span style="font-size:11px; color:#cbd5e1;">Destination: <b>${v.destination || 'N/A'}</b></span><br/>
+              <span style="font-size:11px; color:#cbd5e1;">Route: <b>${v.corridor || 'Regional Shipping Lane'}</b></span><br/>
               <span style="font-size:11px; color:#cbd5e1;">Course Heading: <b>${courseAngle.toFixed(0)}°</b></span><br/>
               <span style="font-size:11px; color:#38bdf8;">Suspect Score: <b>${(v.confidence_score * 100).toFixed(1)}%</b></span>
             </div>
@@ -588,79 +622,84 @@ export default function MapView({
   }, [liveVessels, layerToggles.liveVessels]);
 
   return (
-    <div className="relative w-full h-full min-h-[450px] rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
+    <div className="relative w-full h-full min-h-[360px] sm:min-h-[450px] rounded-xl sm:rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
       {/* Leaflet Map DOM Container */}
-      <div ref={mapContainerRef} className="w-full h-full min-h-[450px] z-10" />
+      <div ref={mapContainerRef} className="w-full h-full min-h-[360px] sm:min-h-[450px] z-10" />
 
-      {/* Carto / Satellite Basemap Switcher */}
-      <div className="absolute top-4 left-4 z-[400] glass-panel p-1.5 rounded-xl border border-slate-800/90 flex items-center gap-1 shadow-xl">
+      {/* Carto / Satellite Basemap Switcher (Compact on mobile) */}
+      <div className="absolute top-2.5 left-2.5 sm:top-4 sm:left-4 z-[400] glass-panel p-1 sm:p-1.5 rounded-lg sm:rounded-xl border border-slate-800/90 flex items-center gap-0.5 sm:gap-1 shadow-xl max-w-[calc(100vw-110px)] sm:max-w-none overflow-x-auto">
         <button
           onClick={() => setMapStyle('carto_voyager')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
             mapStyle === 'carto_voyager'
               ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
           }`}
         >
-          <Globe className="w-3.5 h-3.5" />
-          Carto Voyager
+          <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <span><span className="hidden sm:inline">Carto </span>Voyager</span>
         </button>
 
         <button
           onClick={() => setMapStyle('carto_dark')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
             mapStyle === 'carto_dark'
               ? 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
           }`}
         >
-          <Layers className="w-3.5 h-3.5" />
-          Carto Dark Matter
+          <Layers className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+          <span><span className="hidden sm:inline">Carto </span>Dark<span className="hidden sm:inline"> Matter</span></span>
         </button>
 
         <button
           onClick={() => setMapStyle('satellite')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+          className={`flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg text-[11px] sm:text-xs font-semibold whitespace-nowrap transition-all ${
             mapStyle === 'satellite'
               ? 'bg-gradient-to-r from-amber-600 to-orange-600 text-white shadow-md'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/70'
           }`}
         >
-          <Globe className="w-3.5 h-3.5 text-amber-300" />
-          Satellite Imagery
+          <Globe className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-300" />
+          <span>Satellite<span className="hidden sm:inline"> Imagery</span></span>
         </button>
       </div>
 
       {/* Floating Layer Control Panel with Minimize/Expand Toggle */}
-      <div className={`absolute top-4 right-4 z-[400] glass-panel rounded-xl border border-slate-800/90 shadow-2xl transition-all duration-300 ${
-        isPanelMinimized ? 'p-2 w-auto' : 'p-4 w-64'
+      <div className={`absolute top-2.5 right-2.5 sm:top-4 sm:right-4 z-[400] glass-panel rounded-xl border border-slate-800/90 shadow-2xl transition-all duration-300 ${
+        isPanelMinimized ? 'p-1.5 sm:p-2 w-auto' : 'p-3 sm:p-4 w-60 sm:w-64 max-w-[calc(100vw-1.5rem)]'
       } text-xs font-sans`}>
         {/* Header Bar */}
         <div className={`flex items-center justify-between font-semibold text-slate-200 uppercase tracking-wider ${
-          isPanelMinimized ? '' : 'border-b border-slate-800 pb-2 mb-3'
+          isPanelMinimized ? '' : 'border-b border-slate-800 pb-2 mb-2.5 sm:mb-3'
         }`}>
-          <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsPanelMinimized(!isPanelMinimized)}>
-            <Layers className="w-4 h-4 text-cyan-400" />
-            <span>{isPanelMinimized ? 'GIS Layers' : 'Leaflet GIS Layers'}</span>
+          <button 
+            type="button"
+            className="flex items-center gap-1.5 cursor-pointer focus:outline-none" 
+            onClick={() => setIsPanelMinimized(!isPanelMinimized)}
+          >
+            <Layers className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
+            <span className="text-[11px] sm:text-xs">{isPanelMinimized ? 'Layers' : 'GIS Layers'}</span>
             {!isPanelMinimized && <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping ml-1" />}
-          </div>
+          </button>
 
           <button
+            type="button"
             onClick={() => setIsPanelMinimized(!isPanelMinimized)}
-            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"
+            className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors ml-1"
             title={isPanelMinimized ? "Expand Layers Panel" : "Minimize Layers Panel"}
           >
-            {isPanelMinimized ? <ChevronDown className="w-4 h-4 text-cyan-400" /> : <ChevronUp className="w-4 h-4" />}
+            {isPanelMinimized ? <ChevronDown className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" /> : <ChevronUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
           </button>
         </div>
 
         {/* Expandable Layer Controls */}
         {!isPanelMinimized && (
-          <div className="space-y-2.5">
-            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors">
-              <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-orange-500 shadow-sm shadow-orange-500/50" />
-                Indian Ocean Spills (60+)
+          <div className="space-y-2 sm:space-y-2.5 max-h-[50vh] sm:max-h-none overflow-y-auto pr-1">
+            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors text-[11px] sm:text-xs">
+              <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded bg-orange-500 shadow-sm shadow-orange-500/50 shrink-0" />
+                <span>Ocean Spills (60+)</span>
               </span>
               <input
                 type="checkbox"
@@ -670,10 +709,10 @@ export default function MapView({
               />
             </label>
 
-            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors">
-              <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-yellow-400 shadow-sm shadow-yellow-400/50" />
-                Probable Origin Zone (-24h)
+            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors text-[11px] sm:text-xs">
+              <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded bg-yellow-400 shadow-sm shadow-yellow-400/50 shrink-0" />
+                <span>Probable Origin (-24h)</span>
               </span>
               <input
                 type="checkbox"
@@ -683,10 +722,10 @@ export default function MapView({
               />
             </label>
 
-            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors">
-              <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-orange-400 shadow-sm shadow-orange-400/50" />
-                Candidate Suspect Track Lines
+            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors text-[11px] sm:text-xs">
+              <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded bg-orange-400 shadow-sm shadow-orange-400/50 shrink-0" />
+                <span>Suspect Track Lines</span>
               </span>
               <input
                 type="checkbox"
@@ -696,10 +735,10 @@ export default function MapView({
               />
             </label>
 
-            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors">
-              <span className="flex items-center gap-2">
-                <span className="w-3 h-3 rounded bg-emerald-400 shadow-sm shadow-emerald-400/50" />
-                Live AIS Feed ({liveVessels ? liveVessels.length : 0} Ships)
+            <label className="flex items-center justify-between cursor-pointer hover:text-white transition-colors text-[11px] sm:text-xs">
+              <span className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded bg-emerald-400 shadow-sm shadow-emerald-400/50 shrink-0" />
+                <span>Live AIS ({liveVessels ? liveVessels.length : 0})</span>
               </span>
               <input
                 type="checkbox"
@@ -710,10 +749,10 @@ export default function MapView({
             </label>
 
             <div className="pt-2 border-t border-slate-800">
-              <div className="text-[11px] font-semibold text-slate-400 mb-1">Forward Forecast Envelopes</div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="text-[10px] sm:text-[11px] font-semibold text-slate-400 mb-1">Forecast Envelopes</div>
+              <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                 {['6h', '12h', '24h', '48h'].map(step => (
-                  <label key={step} className="flex items-center gap-1.5 cursor-pointer text-slate-300">
+                  <label key={step} className="flex items-center gap-1.5 cursor-pointer text-slate-300 text-[11px]">
                     <input
                       type="checkbox"
                       checked={layerToggles[`forecast_${step}`] !== false}
