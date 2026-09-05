@@ -174,20 +174,22 @@ def _initialize_indian_ocean_incidents():
 
         for i in range(sec["count"]):
             seed_val += 1
-            np.random.seed(seed_val)
+            rng_inc = np.random.RandomState(seed_val)
 
             # Enforce sampling strictly inside maritime ocean waters (No land spills)
             attempts = 0
             while True:
                 attempts += 1
-                lat = round(float(np.random.uniform(lat_min, lat_max)), 4)
-                lon = round(float(np.random.uniform(lon_min, lon_max)), 4)
-                if is_in_ocean(lat, lon):
+                lat = round(float(rng_inc.uniform(lat_min, lat_max)), 4)
+                lon = round(float(rng_inc.uniform(lon_min, lon_max)), 4)
+                if is_in_ocean(lat, lon, allow_network=False):
                     break
-                np.random.seed(seed_val + attempts * 1000)
-            length = round(float(np.random.uniform(3.5, 14.0)), 2)
-            width = round(float(np.random.uniform(0.6, 2.8)), 2)
-            angle = float(np.random.uniform(10, 170))
+                # Deterministic re-seed for attempt
+                rng_inc = np.random.RandomState(seed_val + attempts * 1000)
+
+            length = round(float(rng_inc.uniform(3.5, 14.0)), 2)
+            width = round(float(rng_inc.uniform(0.6, 2.8)), 2)
+            angle = float(rng_inc.uniform(10, 170))
 
             poly = generate_organic_spill_polygon(lat, lon, length_km=length, width_km=width, angle_deg=angle, seed=seed_val)
             area_sqkm = round(float(length * width * 0.68), 3)
@@ -206,7 +208,7 @@ def _initialize_indian_ocean_incidents():
                 "sar_image_url": sample_images[s_idx],
                 "prediction_image_url": prediction_images[p_idx],
                 "iou_score": iou_val,
-                "confidence": round(float(np.random.uniform(0.88, 0.98)), 3),
+                "confidence": round(float(rng_inc.uniform(0.88, 0.98)), 3),
                 "spill_area_sqkm": area_sqkm,
                 "centroid_lat": lat,
                 "centroid_lon": lon,
@@ -247,20 +249,45 @@ def get_all_incidents_geometry():
     """Retrieve GeoJSON FeatureCollection of all Indian Ocean spill polygons."""
     return GLOBAL_GEOMETRIES_CACHE
 
+@router.get("/{incident_id}/telemetry")
+def get_incident_live_telemetry(incident_id: str):
+    """
+    On-demand live environmental telemetry endpoint:
+    Fetches real-time atmospheric wind and marine surface currents for the incident centroid from Open-Meteo.
+    """
+    for inc in GLOBAL_INCIDENTS_CACHE:
+        if inc["incident_id"] == incident_id:
+            forcing = fetch_environmental_forcing(inc["centroid_lat"], inc["centroid_lon"])
+            inc["forcing"] = forcing
+            return forcing
+    if incident_id == "latest" and GLOBAL_INCIDENTS_CACHE:
+        inc = GLOBAL_INCIDENTS_CACHE[0]
+        forcing = fetch_environmental_forcing(inc["centroid_lat"], inc["centroid_lon"])
+        inc["forcing"] = forcing
+        return forcing
+    raise HTTPException(status_code=404, detail="Incident ID not found")
+
 @router.get("/{incident_id}")
 def get_incident_details(incident_id: str):
     """Retrieve details for a specific incident with location-specific forcing metadata."""
     for inc in GLOBAL_INCIDENTS_CACHE:
         if inc["incident_id"] == incident_id:
-            if "forcing" not in inc:
-                inc["forcing"] = fetch_environmental_forcing(inc["centroid_lat"], inc["centroid_lon"])
+            if "forcing" not in inc or inc["forcing"].get("source") != "Open-Meteo Real Meteorological & Marine Forcing":
+                try:
+                    inc["forcing"] = fetch_environmental_forcing(inc["centroid_lat"], inc["centroid_lon"])
+                except Exception:
+                    pass
             return inc
-    if incident_id == "latest":
+    if incident_id == "latest" and GLOBAL_INCIDENTS_CACHE:
         inc = GLOBAL_INCIDENTS_CACHE[0]
-        if "forcing" not in inc:
-            inc["forcing"] = fetch_environmental_forcing(inc["centroid_lat"], inc["centroid_lon"])
+        if "forcing" not in inc or inc["forcing"].get("source") != "Open-Meteo Real Meteorological & Marine Forcing":
+            try:
+                inc["forcing"] = fetch_environmental_forcing(inc["centroid_lat"], inc["centroid_lon"])
+            except Exception:
+                pass
         return inc
     raise HTTPException(status_code=404, detail="Incident ID not found")
+
 
 @router.get("/{incident_id}/geometry")
 def get_incident_geometry(incident_id: str):
@@ -278,14 +305,24 @@ def get_incident_geometry(incident_id: str):
 def get_incident_origin(incident_id: str, back_hours: int = Query(24, ge=6, le=48)):
     """Retrieve backward drift simulation origin zone GeoJSON for selected incident."""
     inc = get_incident_details(incident_id)
-    res = run_backward_drift_simulation(inc["centroid_lat"], inc["centroid_lon"], back_hours=back_hours)
+    hours = int(getattr(back_hours, "default", back_hours)) if hasattr(back_hours, "default") else int(back_hours)
+    res = run_backward_drift_simulation(
+        inc["centroid_lat"],
+        inc["centroid_lon"],
+        forcing_data=inc.get("forcing"),
+        back_hours=hours
+    )
     return res["geojson"]
 
 @router.get("/{incident_id}/forecast")
 def get_incident_forecast(incident_id: str):
     """Retrieve +6h, +12h, +24h, +48h forward drift forecast polygons for selected incident."""
     inc = get_incident_details(incident_id)
-    res = run_forward_drift_simulation(inc["centroid_lat"], inc["centroid_lon"])
+    res = run_forward_drift_simulation(
+        inc["centroid_lat"],
+        inc["centroid_lon"],
+        forcing_data=inc.get("forcing")
+    )
     return res
 
 @router.get("/{incident_id}/vessels")

@@ -1,14 +1,32 @@
-import React from 'react';
-import { Compass, Wind, Waves, Clock, History, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Compass, Wind, Waves, Clock, History, AlertCircle, RefreshCw } from 'lucide-react';
 
-export default function ForecastPanel({ forecastData, originGeojson }) {
-  const forcing = forecastData?.['6h']?.geojson?.properties?.forcing || originGeojson?.properties?.forcing;
+export default function ForecastPanel({ incident, forecastData, originGeojson, onRefreshTelemetry }) {
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const forcing = incident?.forcing || forecastData?.['6h']?.geojson?.properties?.forcing || originGeojson?.properties?.forcing;
 
-  const windSpeed = forcing?.wind_speed_m_s || 6.28;
-  const windKnots = (windSpeed * 1.94384).toFixed(1);
-  const currentSpeed = forcing?.current_speed_m_s || 1.10;
-  const currentKnots = (currentSpeed * 1.94384).toFixed(1);
+  const handleRefresh = async () => {
+    if (!onRefreshTelemetry || isRefreshing) return;
+    setIsRefreshing(true);
+    try {
+      await onRefreshTelemetry();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
+
+  const windSpeed = forcing?.wind_speed_m_s != null ? Number(forcing.wind_speed_m_s).toFixed(2) : '—';
+  const windKnots = forcing?.wind_speed_m_s != null ? (Number(forcing.wind_speed_m_s) * 1.94384).toFixed(1) : '—';
+  const windU = forcing?.wind_u_m_s != null ? Number(forcing.wind_u_m_s).toFixed(2) : '0.00';
+  const windV = forcing?.wind_v_m_s != null ? Number(forcing.wind_v_m_s).toFixed(2) : '0.00';
+
+  const currentSpeed = forcing?.current_speed_m_s != null ? Number(forcing.current_speed_m_s).toFixed(2) : '—';
+  const currentKnots = forcing?.current_speed_m_s != null ? (Number(forcing.current_speed_m_s) * 1.94384).toFixed(1) : '—';
+  const currentU = forcing?.current_u_m_s != null ? Number(forcing.current_u_m_s).toFixed(2) : '0.00';
+  const currentV = forcing?.current_v_m_s != null ? Number(forcing.current_v_m_s).toFixed(2) : '0.00';
+
   const sourceName = forcing?.source || "Open-Meteo Real Meteorological & Marine Forcing";
+  const telemetryTime = forcing?.datetime ? new Date(forcing.datetime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Live';
 
   return (
     <div className="glass-panel p-3.5 sm:p-5 rounded-xl sm:rounded-2xl border border-slate-800 space-y-4 sm:space-y-5 font-sans">
@@ -30,9 +48,23 @@ export default function ForecastPanel({ forecastData, originGeojson }) {
             <Wind className="w-4 h-4 text-cyan-400 shrink-0" />
             <span>Environmental Telemetry</span>
           </h4>
-          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded">
-            Live Feed
-          </span>
+          <div className="flex items-center gap-1.5">
+            {onRefreshTelemetry && (
+              <button
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+                title="Fetch latest meteorological & marine data from Open-Meteo"
+                className="inline-flex items-center gap-1 text-[10px] font-mono text-cyan-400 bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/30 px-2 py-0.5 rounded transition-colors cursor-pointer"
+              >
+                <RefreshCw className={`w-2.5 h-2.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                <span>{isRefreshing ? 'Syncing...' : 'Refresh'}</span>
+              </button>
+            )}
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 border border-emerald-500/30 px-2 py-0.5 rounded flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live Feed
+            </span>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 font-mono text-xs">
@@ -43,7 +75,7 @@ export default function ForecastPanel({ forecastData, originGeojson }) {
               Surface Wind (10m Vector)
             </div>
             <div className="text-sm font-bold text-cyan-300">{windSpeed} m/s <span className="text-xs text-slate-400">({windKnots} kts)</span></div>
-            <div className="text-[10px] text-slate-400 mt-1">U: {forcing?.wind_u_m_s || -5.0} m/s | V: {forcing?.wind_v_m_s || 3.8} m/s</div>
+            <div className="text-[10px] text-slate-400 mt-1">U: {windU} m/s | V: {windV} m/s</div>
           </div>
 
           {/* Real Ocean Current Component */}
@@ -53,13 +85,16 @@ export default function ForecastPanel({ forecastData, originGeojson }) {
               Ocean Surface Current
             </div>
             <div className="text-sm font-bold text-blue-300">{currentSpeed} m/s <span className="text-xs text-slate-400">({currentKnots} kts)</span></div>
-            <div className="text-[10px] text-slate-400 mt-1">U: {forcing?.current_u_m_s || 1.09} m/s | V: {forcing?.current_v_m_s || -0.17} m/s</div>
+            <div className="text-[10px] text-slate-400 mt-1">U: {currentU} m/s | V: {currentV} m/s</div>
           </div>
         </div>
 
-        <div className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5 pt-1">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-          <span className="truncate">Source: <strong className="text-slate-200">{sourceName}</strong></span>
+        <div className="text-[10px] font-mono text-slate-400 flex items-center justify-between pt-1">
+          <div className="flex items-center gap-1.5 truncate">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+            <span className="truncate">Source: <strong className="text-slate-200">{sourceName}</strong></span>
+          </div>
+          <span className="text-slate-500 shrink-0 text-[10px] ml-2 font-mono">Synced: {telemetryTime}</span>
         </div>
       </div>
 

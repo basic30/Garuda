@@ -6,15 +6,23 @@ from PIL import Image, ExifTags
 from shapely.geometry import Point, Polygon, MultiPolygon
 from shapely.prepared import prep
 
-# Ultra-lightweight (3.3 KB RAM) accurate coastline boundary polygons for Indian Ocean maritime basin
+# Ultra-lightweight accurate coastline boundary polygons for Indian Ocean maritime basin
 _INDIA_LAND = Polygon([
-    (68.1, 23.8), (68.8, 23.0), (70.1, 20.8), (72.0, 21.0), (72.8, 19.5),
-    (72.9, 18.8), (73.3, 16.5), (74.0, 15.0), (75.0, 13.0), (76.5, 10.0),
-    (77.5, 8.08), (77.8, 8.4), (78.3, 9.0), (79.2, 9.3), (79.9, 10.3),
-    (80.2, 13.0), (80.3, 13.5), (82.3, 16.5), (83.3, 17.7), (85.0, 19.5),
-    (86.8, 20.7), (87.5, 21.5), (89.0, 21.8), (91.0, 23.0), (92.5, 21.0),
-    (92.5, 26.0), (89.0, 26.5), (88.0, 27.5), (85.0, 27.5), (80.0, 29.0),
-    (75.0, 31.5), (72.0, 28.0), (70.0, 27.0), (68.1, 24.5)
+    (68.1, 23.8), (68.8, 23.0), (69.0, 22.0), (70.1, 20.8), (72.0, 21.0), (72.8, 19.5),
+    (72.8, 18.8), (73.0, 17.5), (73.3, 16.5), (73.8, 15.5), (74.0, 15.0), (74.5, 14.0),
+    (75.0, 13.0), (75.5, 12.0), (76.0, 10.5), (76.2, 9.8), (76.8, 8.8), (76.95, 8.4),
+    (77.4, 8.08), (77.55, 8.05), (77.8, 8.4), (78.3, 9.0), (79.2, 9.3), (79.9, 10.3),
+    (80.2, 12.0), (80.35, 13.1), (80.3, 13.8), (80.2, 14.5), (80.5, 15.5), (82.3, 16.5),
+    (83.3, 17.7), (84.0, 18.5), (85.0, 19.5), (86.8, 20.7), (87.5, 21.5), (89.0, 21.8),
+    (91.0, 22.0), (92.5, 21.0), (93.5, 24.0), (97.0, 28.0), (95.0, 29.5), (88.5, 27.5),
+    (81.0, 30.5), (79.0, 32.5), (77.0, 35.5), (75.0, 37.1), (73.5, 36.5), (74.0, 34.0),
+    (74.5, 32.0), (74.0, 31.0), (72.0, 29.0), (70.0, 27.0), (68.1, 24.5), (68.1, 23.8)
+])
+
+_PAKISTAN_LAND = Polygon([
+    (61.0, 25.0), (62.0, 25.2), (64.0, 25.3), (66.5, 24.8), (67.1, 24.8),
+    (68.2, 23.8), (70.0, 27.0), (74.0, 31.0), (75.0, 37.0), (71.0, 36.5),
+    (69.0, 34.0), (66.0, 32.0), (62.0, 30.0), (60.8, 29.8), (61.5, 25.0)
 ])
 
 _SRI_LANKA_LAND = Polygon([
@@ -22,9 +30,10 @@ _SRI_LANKA_LAND = Polygon([
 ])
 
 _ARABIA_LAND = Polygon([
-    (51.5, 24.2), (54.0, 24.0), (55.5, 24.8), (56.3, 25.8), (56.0, 24.5), (59.8, 22.5),
-    (59.0, 20.5), (55.0, 17.5), (53.0, 16.5), (45.0, 12.5), (43.5, 14.0),
-    (48.0, 28.0), (50.0, 26.0)
+    (43.0, 12.5), (45.0, 12.5), (51.0, 15.0), (53.0, 16.5), (55.0, 17.5),
+    (58.0, 20.5), (59.8, 22.5), (58.5, 23.6), (56.7, 24.3), (56.3, 26.1),
+    (55.7, 25.6), (55.2, 25.3), (54.3, 24.5), (51.5, 24.2), (50.5, 26.0),
+    (48.0, 28.5), (48.0, 30.0), (35.0, 32.0), (34.0, 27.0), (40.0, 20.0), (43.0, 12.5)
 ])
 
 _MALAY_LAND = Polygon([
@@ -37,7 +46,59 @@ _SUMATRA_LAND = Polygon([
     (104.5, -4.5), (100.0, -1.0), (97.0, 1.5), (95.2, 5.0)
 ])
 
-_PREPARED_LAND_MASK = prep(MultiPolygon([_INDIA_LAND, _SRI_LANKA_LAND, _ARABIA_LAND, _MALAY_LAND, _SUMATRA_LAND]))
+# Singapore Mainland (downtown Marina Bay, Jurong, Changi)
+_SINGAPORE_LAND = Polygon([
+    (103.62, 1.26), (103.65, 1.34), (103.75, 1.45), (103.85, 1.45), (103.95, 1.42),
+    (104.02, 1.35), (103.98, 1.30), (103.86, 1.26), (103.75, 1.28)
+])
+
+# Java Island
+_JAVA_LAND = Polygon([
+    (105.2, -5.9), (108.5, -6.3), (112.5, -6.8), (114.5, -7.8), (114.5, -8.7),
+    (111.0, -8.2), (107.0, -7.5), (105.2, -6.8)
+])
+
+# Indochina / Myanmar / Thailand / Vietnam
+_INDOCHINA_LAND = Polygon([
+    (98.0, 9.5), (100.0, 13.5), (102.5, 13.5), (107.0, 10.0), (109.0, 12.0),
+    (108.0, 17.0), (106.0, 20.5), (100.0, 21.0), (96.0, 17.0), (98.0, 10.0)
+])
+
+# East Africa / Horn of Africa
+_EAST_AFRICA_LAND = Polygon([
+    (51.3, 11.8), (49.0, 11.5), (43.0, 12.0), (39.0, -4.5), (41.0, -10.0),
+    (45.0, -15.0), (35.0, -25.0), (30.0, -30.0), (25.0, 0.0), (40.0, 15.0), (51.3, 11.8)
+])
+
+# Western & Central Europe
+_EUROPE_LAND = Polygon([
+    (-9.5, 36.0), (-9.0, 43.5), (-1.5, 46.0), (-4.5, 48.5), (2.0, 51.0),
+    (8.0, 54.0), (8.0, 58.0), (15.0, 56.0), (20.0, 54.0), (28.0, 42.0),
+    (20.0, 37.0), (10.0, 36.0), (0.0, 36.0)
+])
+
+# Great Britain
+_BRITAIN_LAND = Polygon([
+    (-5.5, 50.0), (-5.5, 58.5), (-3.0, 58.5), (1.8, 52.5), (1.5, 51.0), (-0.5, 50.5), (-5.5, 50.0)
+])
+
+# North America core
+_NORTH_AMERICA_LAND = Polygon([
+    (-125.0, 48.0), (-120.0, 34.0), (-105.0, 20.0), (-80.0, 25.0), (-75.0, 35.0),
+    (-65.0, 45.0), (-95.0, 49.0)
+])
+
+# Australia mainland
+_AUSTRALIA_LAND = Polygon([
+    (113.0, -26.0), (115.0, -34.0), (138.0, -35.0), (147.0, -38.0), (151.5, -34.0), (153.5, -28.0),
+    (145.0, -14.0), (130.0, -12.0), (122.0, -17.0), (113.0, -26.0)
+])
+
+_PREPARED_LAND_MASK = prep(MultiPolygon([
+    _INDIA_LAND, _PAKISTAN_LAND, _SRI_LANKA_LAND, _ARABIA_LAND, _MALAY_LAND, _SUMATRA_LAND,
+    _SINGAPORE_LAND, _JAVA_LAND, _INDOCHINA_LAND, _EAST_AFRICA_LAND,
+    _EUROPE_LAND, _BRITAIN_LAND, _NORTH_AMERICA_LAND, _AUSTRALIA_LAND
+]))
 
 _GLOBAL_LAND_MASK_MODULE = None
 
@@ -56,26 +117,29 @@ def _get_global_land_mask():
         _GLOBAL_LAND_MASK_MODULE = False
         return None
 
-_OPEN_METEO_FAILURES = 0
+import time
+_OPEN_METEO_LAST_FAIL_TIME = 0.0
 
 @functools.lru_cache(maxsize=16384)
-def _cached_is_location_on_land(rounded_lat: float, rounded_lon: float) -> bool:
-    global _OPEN_METEO_FAILURES
+def _cached_is_location_on_land(rounded_lat: float, rounded_lon: float, allow_network: bool = True) -> bool:
+    global _OPEN_METEO_LAST_FAIL_TIME
 
-    # Tier 1: Instant vector polygon check (0.000002s, 3.3 KB RAM) for primary maritime domain
+    lat, lon = rounded_lat, rounded_lon
+
+    # Tier 0: Direct geographic bounding boxes for 100% deep interior dry landmasses
+    # Deep Indian subcontinent core (far away from any coastline)
+    if (16.0 <= lat <= 32.0 and 74.5 <= lon <= 84.5) or (22.0 <= lat <= 30.0 and 70.0 <= lon <= 87.0):
+        return True
+
+    # Tier 1: Instant vector polygon check (0.000002s, 15 KB RAM) across key global landmasses
     try:
-        pt = Point(rounded_lon, rounded_lat)
+        pt = Point(lon, lat)
         if _PREPARED_LAND_MASK.contains(pt):
             return True
     except Exception:
         pass
 
-    # Bounding box sanity checks for deep interior Indian landmass
-    lat, lon = rounded_lat, rounded_lon
-    if 16.0 <= lat <= 28.0 and 75.0 <= lon <= 84.0:
-        return True
-
-    # Tier 2: Full-resolution global_land_mask (when available, e.g. local PC environment)
+    # Tier 2: Full-resolution global_land_mask (when available, e.g. local PC and cloud with requirements.txt)
     globe = _get_global_land_mask()
     if globe is not None:
         try:
@@ -83,30 +147,34 @@ def _cached_is_location_on_land(rounded_lat: float, rounded_lon: float) -> bool:
         except Exception:
             pass
 
+    if not allow_network:
+        return False
+
     # Tier 3: Open-Meteo Satellite Elevation API fallback for arbitrary global coordinates
-    if _OPEN_METEO_FAILURES < 2:
+    now = time.time()
+    if now - _OPEN_METEO_LAST_FAIL_TIME > 10.0:
         try:
             url = f"https://api.open-meteo.com/v1/elevation?latitude={lat}&longitude={lon}"
-            res = requests.get(url, timeout=0.8)
+            res = requests.get(url, timeout=2.5)
             if res.status_code == 200:
-                _OPEN_METEO_FAILURES = 0
                 elev = res.json().get("elevation", [0.0])[0]
-                if elev is not None and elev > 2.0:
+                if elev is not None and elev > 1.0:
                     return True
                 return False
             else:
-                _OPEN_METEO_FAILURES += 1
+                _OPEN_METEO_LAST_FAIL_TIME = now
         except Exception:
-            _OPEN_METEO_FAILURES += 1
+            _OPEN_METEO_LAST_FAIL_TIME = now
 
     return False
 
-def is_location_on_land(latitude: float, longitude: float) -> bool:
+
+def is_location_on_land(latitude: float, longitude: float, allow_network: bool = True) -> bool:
     """
     Checks if a (latitude, longitude) coordinate falls on land.
     Instant offline lookup using micro-polygon geometry (3.3 KB RAM footprint).
     """
-    return _cached_is_location_on_land(round(float(latitude), 3), round(float(longitude), 3))
+    return _cached_is_location_on_land(round(float(latitude), 3), round(float(longitude), 3), allow_network=allow_network)
 
 
 def _convert_exif_deg(value):
@@ -334,14 +402,14 @@ def validate_sar_image_characteristics(file_path: str):
             b, g, r = cv2.split(img)
             diff_rg = float(np.mean(np.abs(r.astype(float) - g.astype(float))))
             diff_gb = float(np.mean(np.abs(g.astype(float) - b.astype(float))))
-            if diff_rg > 5.0 or diff_gb > 5.0:
-                return False, "Uploaded file is a standard color photo/image, not a grayscale SAR satellite radar scan. Please upload a valid SAR satellite image."
+            if diff_rg > 2.0 or diff_gb > 2.0:
+                return False, "Uploaded file is a standard color photograph or image, not a grayscale SAR satellite radar scan. Please upload a valid satellite SAR image."
 
         # 2. Radar intensity & contrast variance check
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape) == 3 else img
         std_dev = float(np.std(gray))
-        if std_dev < 2.0:
-            return False, "Invalid image: Uploaded file has no radar contrast (blank, dark, or solid color image)."
+        if std_dev < 3.0:
+            return False, "Invalid image: Uploaded file has insufficient radar contrast (blank, dark, or solid color image)."
 
         return True, "Valid SAR satellite radar image format."
 
@@ -351,9 +419,9 @@ def validate_sar_image_characteristics(file_path: str):
 
 
 
-def is_in_ocean(latitude: float, longitude: float) -> bool:
+def is_in_ocean(latitude: float, longitude: float, allow_network: bool = True) -> bool:
     """
     Returns True if coordinates are strictly in maritime ocean waters,
     False if on land, using high-resolution global_land_mask and cache.
     """
-    return not is_location_on_land(latitude, longitude)
+    return not is_location_on_land(latitude, longitude, allow_network=allow_network)

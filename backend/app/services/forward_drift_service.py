@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 import numpy as np
 from shapely.geometry import Polygon, MultiPoint, mapping
 import pyproj
@@ -38,10 +39,14 @@ def run_forward_drift_simulation(centroid_lat,
 
     center_x, center_y = project_to_meters(centroid_lon, centroid_lat)
 
+    # Deterministic, thread-safe RNG seeded by incident centroid coordinates
+    coord_key = f"{round(float(centroid_lat), 4)}_{round(float(centroid_lon), 4)}"
+    seed = int(hashlib.md5(coord_key.encode()).hexdigest()[:8], 16) % 100000
+    rng = np.random.RandomState(seed)
+
     # Seed particles initially at centroid with small initial radius
-    np.random.seed(42)
-    init_radii = np.random.uniform(0, 100, num_particles) # 100m initial radius
-    init_angles = np.random.uniform(0, 2 * np.pi, num_particles)
+    init_radii = rng.uniform(0, 100, num_particles) # 100m initial radius
+    init_angles = rng.uniform(0, 2 * np.pi, num_particles)
 
     particle_x = center_x + init_radii * np.cos(init_angles)
     particle_y = center_y + init_radii * np.sin(init_angles)
@@ -58,8 +63,8 @@ def run_forward_drift_simulation(centroid_lat,
 
         # Diffusion (turbulent dispersion growing with time: K = 1.0 m^2/s)
         diffusion_std = np.sqrt(2.0 * 1.0 * dt_seconds)
-        diff_x = np.random.normal(0, diffusion_std, num_particles)
-        diff_y = np.random.normal(0, diffusion_std, num_particles)
+        diff_x = rng.normal(0, diffusion_std, num_particles)
+        diff_y = rng.normal(0, diffusion_std, num_particles)
 
         cur_x = particle_x + disp_x + diff_x
         cur_y = particle_y + disp_y + diff_y

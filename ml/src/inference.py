@@ -146,12 +146,26 @@ def run_inference(image_path,
     # Post-processing (Phase 15)
     final_mask, post_report = post_process_mask(raw_binary_mask, min_component_size=50)
 
-    # If mask is empty or saturated, generate synthetic organic spill feature for visual rendering
-    if np.sum(final_mask) == 0 or np.mean(final_mask) > 0.8:
-        final_mask = np.zeros((orig_h, orig_w), dtype=np.uint8)
-        ch, cw = orig_h // 2, orig_w // 2
-        cv2.ellipse(final_mask, (cw, ch), (int(cw * 0.35), int(ch * 0.12)), 35, 0, 360, 1, -1)
-        post_report["retained_spill_components"] = 1
+    # If U-Net produced 0 components, perform radar backscatter dark-anomaly analysis
+    if post_report["retained_spill_components"] == 0:
+        sar_gray = cv2.cvtColor(orig_img, cv2.COLOR_BGR2GRAY) if len(orig_img.shape) == 3 else orig_img
+        blurred = cv2.GaussianBlur(sar_gray, (9, 9), 0)
+        sea_level = float(np.percentile(blurred, 65))
+        thresh = float(np.percentile(blurred, 20))
+        if sea_level > 15 and thresh < sea_level * 0.82:
+            cand = ((blurred < thresh) & (blurred < sea_level * 0.75)).astype(np.uint8)
+            num_l, lbls, sts, _ = cv2.connectedComponentsWithStats(cand, connectivity=8)
+            for i in range(1, num_l):
+                a = sts[i, cv2.CC_STAT_AREA]
+                if 80 <= a <= (orig_h * orig_w * 0.35):
+                    patch_m = np.mean(sar_gray[lbls == i])
+                    bg_m = np.mean(sar_gray[lbls != i])
+                    w = sts[i, cv2.CC_STAT_WIDTH]
+                    h = sts[i, cv2.CC_STAT_HEIGHT]
+                    asp = max(w, h) / max(1, min(w, h))
+                    if (bg_m / max(1.0, patch_m)) >= 1.25 and asp >= 1.15:
+                        final_mask[lbls == i] = 1
+                        post_report["retained_spill_components"] += 1
 
     # Generate professional 256x256 Cyan Mask Overlay image for web rendering
     os.makedirs(output_dir, exist_ok=True)

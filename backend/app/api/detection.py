@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 from ml.src.inference import run_inference
 from backend.app.services.geometry_service import compute_spill_geometry, generate_organic_spill_polygon
 from backend.app.services.location_service import is_location_on_land, extract_image_coordinates, validate_sar_image_characteristics
-from backend.app.api.incidents import GLOBAL_INCIDENTS_CACHE, GLOBAL_GEOMETRIES_CACHE
+from backend.app.api.incidents import GLOBAL_INCIDENTS_CACHE, GLOBAL_GEOMETRIES_CACHE, _fast_location_forcing
 
 router = APIRouter(prefix="/detection", tags=["Detection"])
 
@@ -55,8 +55,8 @@ async def extract_sar_image_metadata(file: UploadFile = File(...)):
 async def upload_and_detect_sar_image(
     file: UploadFile = File(None),
     temp_file_id: str = Form(None),
-    latitude: float = Form(1.2800),
-    longitude: float = Form(103.8500)
+    latitude: float = Form(1.2415),
+    longitude: float = Form(103.7850)
 ):
     """
     Custom SAR Satellite Image Upload & Live Detection Endpoint:
@@ -108,7 +108,7 @@ async def upload_and_detect_sar_image(
 
     # Auto-extract geographic coordinates and image capture time from SAR image metadata
     meta_lat, meta_lon, meta_time, has_meta = extract_image_coordinates(file_path)
-    if (latitude == 1.2800 and longitude == 103.8500) and has_meta and meta_lat is not None and meta_lon is not None:
+    if (latitude == 1.2415 and longitude == 103.7850) and has_meta and meta_lat is not None and meta_lon is not None:
         latitude, longitude = meta_lat, meta_lon
 
     # Land vs Ocean validation
@@ -173,22 +173,18 @@ async def upload_and_detect_sar_image(
         print(f"Preview generation warning: {e}", flush=True)
         shutil.copyfile(file_path, preview_path)
 
-    # Run PyTorch U-Net Inference & Post-processing
+    # Run PyTorch U-Net Inference & Dark Anomaly Detection
     try:
         ckpt_path = "ml/checkpoints/best_model.pth"
-        if os.path.exists(ckpt_path):
-            inf_result = run_inference(file_path, checkpoint_path=ckpt_path, output_dir="outputs/masks")
-            mask_out_path = inf_result["mask_out_path"]
-            retained_components = inf_result["post_report"]["retained_spill_components"]
-        else:
-            mask_out_path = preview_path
-            retained_components = 1
+        inf_result = run_inference(file_path, checkpoint_path=ckpt_path, output_dir="outputs/masks")
+        mask_out_path = inf_result["mask_out_path"]
+        retained_components = inf_result["post_report"]["retained_spill_components"]
     except Exception as e:
-        print(f"Inference warning: {e}. Falling back to geometry extraction...", flush=True)
+        print(f"Inference error: {e}", flush=True)
         mask_out_path = preview_path
-        retained_components = 1
+        retained_components = 0
 
-    # Check if U-Net model detected valid oil spill features
+    # Check if model detected valid oil spill features
     if retained_components == 0:
         if os.path.exists(file_path):
             os.remove(file_path)
@@ -198,7 +194,7 @@ async def upload_and_detect_sar_image(
             os.remove(mask_out_path)
         raise HTTPException(
             status_code=400,
-            detail="No oil spill signatures were detected in this SAR image. Please upload a valid SAR satellite scene containing marine oil spill features."
+            detail="No marine oil spill detected: The uploaded image does not contain valid satellite SAR oil slick features. Please upload a satellite SAR scene containing genuine dark radar oil slick anomalies."
         )
 
     # Extract spatial geometry aligned along marine transit corridor (major axis 55°)
@@ -230,7 +226,8 @@ async def upload_and_detect_sar_image(
         "centroid_lon": longitude,
         "centroid": [latitude, longitude],
         "status": "Active / Newly Detected",
-        "created_at": now_iso
+        "created_at": now_iso,
+        "forcing": _fast_location_forcing(latitude, longitude)
     }
 
     feature = {

@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 import numpy as np
 from shapely.geometry import Polygon, MultiPoint, mapping
 import pyproj
@@ -37,9 +38,13 @@ def run_backward_drift_simulation(centroid_lat,
 
     center_x, center_y = project_to_meters(centroid_lon, centroid_lat)
 
-    np.random.seed(100)
-    init_radii = np.random.uniform(0, 150, num_particles)
-    init_angles = np.random.uniform(0, 2 * np.pi, num_particles)
+    # Deterministic, thread-safe RNG seeded by incident centroid coordinates
+    coord_key = f"{round(float(centroid_lat), 4)}_{round(float(centroid_lon), 4)}"
+    seed = int(hashlib.md5(coord_key.encode()).hexdigest()[:8], 16) % 100000
+    rng = np.random.RandomState(seed)
+
+    init_radii = rng.uniform(0, 150, num_particles)
+    init_angles = rng.uniform(0, 2 * np.pi, num_particles)
 
     particle_x = center_x + init_radii * np.cos(init_angles)
     particle_y = center_y + init_radii * np.sin(init_angles)
@@ -49,8 +54,8 @@ def run_backward_drift_simulation(centroid_lat,
     disp_y = v_back_mps * dt_seconds
 
     diffusion_std = np.sqrt(2.0 * 1.5 * dt_seconds)
-    diff_x = np.random.normal(0, diffusion_std, num_particles)
-    diff_y = np.random.normal(0, diffusion_std, num_particles)
+    diff_x = rng.normal(0, diffusion_std, num_particles)
+    diff_y = rng.normal(0, diffusion_std, num_particles)
 
     origin_x = particle_x + disp_x + diff_x
     origin_y = particle_y + disp_y + diff_y
@@ -61,7 +66,7 @@ def run_backward_drift_simulation(centroid_lat,
 
     origin_poly_m = transform(project_to_meters, origin_polygon)
     origin_area_sqkm = origin_poly_m.area / 1e6
-    origin_centroid = [float(origin_polygon.centroid.y), float(origin_polygon.centroid.x)]
+    origin_centroid = [round(float(origin_polygon.centroid.y), 4), round(float(origin_polygon.centroid.x), 4)]
 
     geojson_origin = {
         "type": "Feature",

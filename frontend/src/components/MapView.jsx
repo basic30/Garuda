@@ -157,6 +157,29 @@ export default function MapView({
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
+    // Define dedicated custom map panes with explicit z-indices to guarantee layer order.
+    // This permanently eliminates any race conditions where layers added later cover earlier layers.
+    map.createPane('allSpillsPane');
+    map.getPane('allSpillsPane').style.zIndex = 405;
+
+    map.createPane('selectedSpillPane');
+    map.getPane('selectedSpillPane').style.zIndex = 410;
+
+    map.createPane('originZonePane');
+    map.getPane('originZonePane').style.zIndex = 415;
+
+    map.createPane('forecastPane');
+    map.getPane('forecastPane').style.zIndex = 420;
+
+    map.createPane('driftTimelinePane');
+    map.getPane('driftTimelinePane').style.zIndex = 425;
+
+    map.createPane('vesselTracksPane');
+    map.getPane('vesselTracksPane').style.zIndex = 430;
+
+    map.createPane('vesselIntersectionsPane');
+    map.getPane('vesselIntersectionsPane').style.zIndex = 435;
+
     const initialTile = L.tileLayer(BASEMAP_URLS[mapStyle] || BASEMAP_URLS.carto_voyager, {
       minZoom: 3,
       maxZoom: 20,
@@ -169,8 +192,9 @@ export default function MapView({
 
     tileLayerRef.current = initialTile;
 
-    // Initialize Layer Groups
+    // Initialize Layer Groups with dedicated panes
     allSpillsLayerRef.current = L.geoJSON(null, {
+      pane: 'allSpillsPane',
       style: {
         color: '#ea580c',
         weight: 2,
@@ -193,6 +217,7 @@ export default function MapView({
     }).addTo(map);
 
     selectedSpillLayerRef.current = L.geoJSON(null, {
+      pane: 'selectedSpillPane',
       style: {
         color: '#38bdf8',
         weight: 4,
@@ -202,6 +227,7 @@ export default function MapView({
     }).addTo(map);
 
     originLayerRef.current = L.geoJSON(null, {
+      pane: 'originZonePane',
       style: {
         color: '#eab308',
         weight: 2.5,
@@ -212,6 +238,7 @@ export default function MapView({
     }).addTo(map);
 
     forecastLayerRef.current = L.geoJSON(null, {
+      pane: 'forecastPane',
       style: (feature) => {
         const hr = feature?.properties?.forecast_hour;
         let color = '#a855f7';
@@ -308,7 +335,19 @@ export default function MapView({
   useEffect(() => {
     if (mapRef.current) {
       const timer = setTimeout(() => {
-        mapRef.current.invalidateSize();
+        if (mapRef.current) {
+          try {
+            mapRef.current.invalidateSize();
+            if (incident?.centroid) {
+              const [lat, lon] = incident.centroid;
+              if (typeof lat === 'number' && typeof lon === 'number' && !isNaN(lat) && !isNaN(lon)) {
+                mapRef.current.setView([lat, lon], 11);
+              }
+            }
+          } catch (e) {
+            console.warn("Error invalidating map size on tab switch:", e);
+          }
+        }
       }, 150);
       return () => clearTimeout(timer);
     }
@@ -336,7 +375,35 @@ export default function MapView({
 
     if (incident?.centroid && map) {
       const [lat, lon] = incident.centroid;
-      map.flyTo([lat, lon], 11, { duration: 1.5 });
+      if (typeof lat === 'number' && typeof lon === 'number' && !isNaN(lat) && !isNaN(lon)) {
+        // Safe check for mobile tab switching: if map container is hidden (display: none),
+        // clientWidth / clientHeight will be 0. Calling flyTo in Leaflet with 0x0 size produces
+        // NaN coordinates causing `Invalid LatLng object: (NaN, NaN)` exception.
+        // Fall back gracefully to setView when container is hidden!
+        const isContainerVisible = mapContainerRef.current &&
+          mapContainerRef.current.offsetParent !== null &&
+          mapContainerRef.current.clientWidth > 0 &&
+          mapContainerRef.current.clientHeight > 0;
+
+        if (isContainerVisible) {
+          try {
+            const size = map.getSize();
+            if (size.x > 0 && size.y > 0) {
+              map.flyTo([lat, lon], 11, { duration: 1.5 });
+            } else {
+              map.setView([lat, lon], 11);
+            }
+          } catch {
+            map.setView([lat, lon], 11);
+          }
+        } else {
+          try {
+            map.setView([lat, lon], 11);
+          } catch {
+            // Ignored if map pane is detached
+          }
+        }
+      }
     }
   }, [geometry, incident]);
 
@@ -348,6 +415,7 @@ export default function MapView({
 
     if (layerToggles.origin && originGeojson) {
       const geoLayer = L.geoJSON(originGeojson, {
+        pane: 'originZonePane',
         style: {
           color: '#eab308',
           weight: 3,
@@ -361,9 +429,10 @@ export default function MapView({
 
       // Add prominent origin centroid target marker
       const props = originGeojson.properties || {};
-      const c = props.probable_origin_centroid || [incident?.centroid[0], incident?.centroid[1]];
-      if (c && c[0] && c[1]) {
+      const c = props.probable_origin_centroid || [incident?.centroid?.[0], incident?.centroid?.[1]];
+      if (c && c[0] != null && c[1] != null && !isNaN(c[0]) && !isNaN(c[1])) {
         const originMarker = L.circleMarker([c[0], c[1]], {
+          pane: 'originZonePane',
           radius: 9,
           color: '#ffffff',
           weight: 2.5,
@@ -380,14 +449,32 @@ export default function MapView({
         originLayerRef.current.addLayer(originMarker);
       }
 
-      // Auto-fit map viewport to frame both the origin zone polygon and incident centroid
+      // Auto-fit map viewport to frame both the origin zone polygon and incident centroid safely
       if (map) {
-        const bounds = geoLayer.getBounds();
-        if (bounds && bounds.isValid()) {
-          if (incident?.centroid) {
-            bounds.extend(incident.centroid);
+        try {
+          const bounds = geoLayer.getBounds();
+          if (bounds && bounds.isValid()) {
+            if (incident?.centroid && typeof incident.centroid[0] === 'number' && !isNaN(incident.centroid[0])) {
+              bounds.extend(incident.centroid);
+            }
+            const isContainerVisible = mapContainerRef.current &&
+              mapContainerRef.current.offsetParent !== null &&
+              mapContainerRef.current.clientWidth > 0 &&
+              mapContainerRef.current.clientHeight > 0;
+
+            if (isContainerVisible) {
+              const size = map.getSize();
+              if (size.x > 0 && size.y > 0) {
+                map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13, animate: true, duration: 1.5 });
+              } else {
+                map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13, animate: false });
+              }
+            } else {
+              map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13, animate: false });
+            }
           }
-          map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13, animate: true, duration: 1.5 });
+        } catch (e) {
+          console.warn("Could not fitBounds on origin zone:", e);
         }
       }
     }
@@ -444,6 +531,7 @@ export default function MapView({
       };
 
       const driftPolygonLayer = L.geoJSON(driftedGeojson, {
+        pane: 'driftTimelinePane',
         style: {
           color: '#ec4899',
           weight: 3,
@@ -455,6 +543,7 @@ export default function MapView({
 
       if (incident?.centroid) {
         const centerMarker = L.circleMarker([cLat + latOffset, cLon + lonOffset], {
+          pane: 'driftTimelinePane',
           radius: 7,
           color: '#ffffff',
           weight: 2,
@@ -483,8 +572,9 @@ export default function MapView({
           const pinColor = isRank1 ? '#f97316' : (v.suspect_rank === 2 ? '#eab308' : '#38bdf8');
 
           // Bold, high-contrast and clearly visible maritime navigation tracks
-          // 1. Vibrant colored glow outline
+          // Rendered on dedicated 'vesselTracksPane' (z-index 430) to always stay on top of oil spills (z-index 410)
           const glowLine = L.polyline(latLons, {
+            pane: 'vesselTracksPane',
             color: pinColor,
             weight: isRank1 ? 6.5 : 4.5,
             opacity: 0.45
@@ -492,6 +582,7 @@ export default function MapView({
 
           // 2. Bold bright core dashed line (Clearly visible on any dark satellite or street basemap)
           const trackLine = L.polyline(latLons, {
+            pane: 'vesselTracksPane',
             color: '#ffffff',
             weight: isRank1 ? 2.8 : 2.0,
             dashArray: isRank1 ? '7, 5' : '5, 5',
@@ -530,6 +621,7 @@ export default function MapView({
             const aisGap = v.metrics?.ais_gap_minutes ? `${v.metrics.ais_gap_minutes} mins` : 'None (Continuous AIS)';
 
             const dischargeMarker = L.circleMarker([wpOrigin.lat, wpOrigin.lon], {
+              pane: 'vesselIntersectionsPane',
               radius: 9,
               color: '#f97316',
               weight: 2,

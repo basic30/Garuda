@@ -6,6 +6,7 @@ import IncidentDetails from './components/IncidentDetails';
 import VesselRanking from './components/VesselRanking';
 import ForecastPanel from './components/ForecastPanel';
 import UploadModal from './components/UploadModal';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
@@ -165,6 +166,20 @@ export default function App() {
       .catch(() => setIsOriginLoading(false));
   };
 
+  // Refresh live environmental telemetry from Open-Meteo
+  const handleRefreshTelemetry = async () => {
+    if (!selectedIncident) return;
+    try {
+      const res = await fetch(`${API_BASE}/incidents/${selectedIncident.incident_id}/telemetry`);
+      if (res.ok) {
+        const freshForcing = await res.json();
+        setSelectedIncident(prev => prev ? ({ ...prev, forcing: freshForcing }) : prev);
+      }
+    } catch (err) {
+      console.warn('Telemetry refresh error:', err);
+    }
+  };
+
   // Handle successful SAR upload
   const handleUploadSuccess = (uploadData) => {
     if (uploadData && uploadData.incident) {
@@ -204,22 +219,24 @@ export default function App() {
           } p-2 sm:p-3 lg:p-0`}
         >
           <div className="flex-1 relative min-h-0">
-            <MapView
-              incident={selectedIncident}
-              allGeometries={allGeometries}
-              geometry={geometry}
-              originGeojson={originGeojson}
-              forecastData={forecastData}
-              vessels={vessels}
-              liveVessels={liveVessels}
-              layerToggles={layerToggles}
-              setLayerToggles={setLayerToggles}
-              onSelectIncident={selectIncident}
-              mapStyle={mapStyle}
-              setMapStyle={setMapStyle}
-              timelineHour={timelineHour}
-              activeTab={activeTab}
-            />
+            <ErrorBoundary>
+              <MapView
+                incident={selectedIncident}
+                allGeometries={allGeometries}
+                geometry={geometry}
+                originGeojson={originGeojson}
+                forecastData={forecastData}
+                vessels={vessels}
+                liveVessels={liveVessels}
+                layerToggles={layerToggles}
+                setLayerToggles={setLayerToggles}
+                onSelectIncident={selectIncident}
+                mapStyle={mapStyle}
+                setMapStyle={setMapStyle}
+                timelineHour={timelineHour}
+                activeTab={activeTab}
+              />
+            </ErrorBoundary>
           </div>
 
           {/* Interactive Timeline Animation Slider */}
@@ -264,7 +281,12 @@ export default function App() {
             activeTab === 'forecast' ? 'flex lg:hidden' : 'hidden'
           }`}
         >
-          <ForecastPanel forecastData={forecastData} originGeojson={originGeojson} />
+          <ForecastPanel
+            incident={selectedIncident}
+            forecastData={forecastData}
+            originGeojson={originGeojson}
+            onRefreshTelemetry={handleRefreshTelemetry}
+          />
         </div>
 
         {/* Desktop Right Column (when activeTab !== 'vessels') */}
@@ -281,7 +303,12 @@ export default function App() {
             isForwardLoading={isForwardLoading}
             isOriginLoading={isOriginLoading}
           />
-          <ForecastPanel forecastData={forecastData} originGeojson={originGeojson} />
+          <ForecastPanel
+            incident={selectedIncident}
+            forecastData={forecastData}
+            originGeojson={originGeojson}
+            onRefreshTelemetry={handleRefreshTelemetry}
+          />
           <VesselRanking vessels={vessels} />
         </div>
 

@@ -1,14 +1,15 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, X, CheckCircle2, AlertCircle, FileImage, Loader2, Compass } from 'lucide-react';
-import { extractClientMetadata, getOptimizedUploadPayload } from '../utils/sarMetadata';
+import { Upload, X, CheckCircle2, AlertCircle, FileImage, Loader2, Compass, Waves } from 'lucide-react';
+import { extractClientMetadata, getOptimizedUploadPayload, isClientCoordinateOnLand } from '../utils/sarMetadata';
 
 const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.origin.includes('5173') ? 'http://127.0.0.1:8000/api' : '/api');
 
 export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [tempFileId, setTempFileId] = useState(null);
-  const [lat, setLat] = useState('1.2800');
-  const [lon, setLon] = useState('103.8500');
+  const [lat, setLat] = useState('1.2415');
+  const [lon, setLon] = useState('103.7850');
+
   const [imageTime, setImageTime] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -24,8 +25,8 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     }
     setSelectedFile(null);
     setTempFileId(null);
-    setLat('1.2800');
-    setLon('103.8500');
+    setLat('1.2415');
+    setLon('103.7850');
     setImageTime(null);
     setUploading(false);
     setExtracting(false);
@@ -119,6 +120,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                 setLat(data.latitude.toString());
                 setLon(data.longitude.toString());
                 setHasMetadata(true);
+                if (data.is_land) {
+                  setError(`Image GPS metadata (${data.latitude}°N, ${data.longitude}°E) falls on land. Oil spill detection requires maritime ocean coordinates.`);
+                }
               }
               if (data.image_time) {
                 setImageTime(data.image_time);
@@ -145,6 +149,11 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
 
     if (!isValidSar) {
       setError(error || 'Cannot process file: Uploaded image is not a valid SAR satellite radar scan.');
+      return;
+    }
+
+    if (isClientCoordinateOnLand(lat, lon)) {
+      setError(`Selected location (${Number(lat).toFixed(4)}°N, ${Number(lon).toFixed(4)}°E) is on land. Marine oil spill detection and drift modeling require maritime ocean coordinates.`);
       return;
     }
 
@@ -191,6 +200,8 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       setError(err.message || 'Error processing image.');
     }
   };
+
+  const isTargetOnLand = isClientCoordinateOnLand(lat, lon);
 
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/85 backdrop-blur-sm p-3 sm:p-4">
@@ -282,7 +293,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                     setLat(e.target.value);
                     setHasMetadata(false);
                   }}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 sm:px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className={`w-full bg-slate-900 border rounded-lg px-2.5 sm:px-3 py-2 text-slate-100 focus:outline-none ${
+                    isTargetOnLand ? 'border-rose-500/80 focus:border-rose-400' : 'border-slate-700 focus:border-cyan-500'
+                  }`}
                   required
                 />
               </div>
@@ -296,11 +309,26 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
                     setLon(e.target.value);
                     setHasMetadata(false);
                   }}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 sm:px-3 py-2 text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className={`w-full bg-slate-900 border rounded-lg px-2.5 sm:px-3 py-2 text-slate-100 focus:outline-none ${
+                    isTargetOnLand ? 'border-rose-500/80 focus:border-rose-400' : 'border-slate-700 focus:border-cyan-500'
+                  }`}
                   required
                 />
               </div>
             </div>
+
+            {/* Real-time Land vs Ocean Validation Indicator */}
+            {isTargetOnLand ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-rose-400 bg-rose-500/10 border border-rose-500/25 px-2.5 py-1.5 rounded-lg font-mono">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>Selected coordinate is on land! Marine oil spill detection requires ocean waters.</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1.5 rounded-lg font-mono">
+                <Waves className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+                <span>Verified Ocean Water Coordinates</span>
+              </div>
+            )}
           </div>
 
           {error && (
@@ -320,9 +348,9 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
             </button>
             <button
               type="submit"
-              disabled={uploading || !isValidSar}
+              disabled={uploading || !isValidSar || isTargetOnLand}
               className={`w-full sm:w-auto px-5 py-2.5 sm:py-2 rounded-lg text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
-                !isValidSar
+                !isValidSar || isTargetOnLand
                   ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                   : 'bg-gradient-to-r from-cyan-600 to-blue-600 text-white shadow-lg hover:from-cyan-500 hover:to-blue-500'
               }`}
@@ -343,5 +371,6 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
         </form>
       </div>
     </div>
+
   );
 }
