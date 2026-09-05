@@ -148,7 +148,7 @@ async def connect_to_aisstream(api_key=None, bbox=[[[0.0, 50.0], [28.0, 100.0]]]
 
     while True:
         try:
-            async with websockets.connect(url, open_timeout=4, ping_interval=20, ping_timeout=10) as websocket:
+            async with websockets.connect(url) as websocket:
                 await websocket.send(json.dumps(subscribe_msg))
                 CONNECTION_STATUS["connected"] = True
 
@@ -184,7 +184,7 @@ async def connect_to_aisstream(api_key=None, bbox=[[[0.0, 50.0], [28.0, 100.0]]]
 
         except Exception as e:
             CONNECTION_STATUS["connected"] = True # keep gracefully online
-            await asyncio.sleep(10)
+            await asyncio.sleep(5)
 
 def get_live_vessels():
     """Returns ALL active live vessels without artificial restrictions."""
