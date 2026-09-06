@@ -80,7 +80,7 @@ async def startup_event():
         print(f"Initializing background AISstream listener with API Key: {api_key[:8]}...", flush=True)
         asyncio.create_task(connect_to_aisstream(api_key))
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def root():
     return {
         "system": "Marine Oil Spill Detection, Drift Tracking & Vessel Attribution API",
@@ -89,7 +89,8 @@ def root():
         "docs_url": "/docs"
     }
 
-@app.get("/api/status")
+@app.api_route("/api/status", methods=["GET", "HEAD"])
+@app.api_route("/api/health", methods=["GET", "HEAD"])
 def system_status():
     return {
         "api_status": "ONLINE",
