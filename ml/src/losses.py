@@ -9,12 +9,14 @@ class DiceLoss(nn.Module):
 
     def forward(self, logits, targets):
         probs = torch.sigmoid(logits)
-        probs_flat = probs.view(-1)
-        targets_flat = targets.view(-1)
+        batch_size = probs.size(0)
+        probs_flat = probs.view(batch_size, -1)
+        targets_flat = targets.view(batch_size, -1)
 
-        intersection = (probs_flat * targets_flat).sum()
-        dice = (2.0 * intersection + self.smooth) / (probs_flat.sum() + targets_flat.sum() + self.smooth)
-        return 1.0 - dice
+        intersection = (probs_flat * targets_flat).sum(dim=1)
+        cardinality = probs_flat.sum(dim=1) + targets_flat.sum(dim=1)
+        dice = (2.0 * intersection + self.smooth) / (cardinality + self.smooth)
+        return (1.0 - dice).mean()
 
 class BCEDiceLoss(nn.Module):
     def __init__(self, bce_weight=0.5, dice_weight=0.5, pos_weight=None):
@@ -22,15 +24,16 @@ class BCEDiceLoss(nn.Module):
         self.bce_weight = bce_weight
         self.dice_weight = dice_weight
         if pos_weight is not None:
-            self.bce = nn.BCEWithLogitsLoss(pos_weight=torch.tensor([pos_weight]))
+            self.register_buffer("pos_weight", torch.tensor([pos_weight], dtype=torch.float32))
         else:
-            self.bce = nn.BCEWithLogitsLoss()
+            self.pos_weight = None
         self.dice = DiceLoss()
 
     def forward(self, logits, targets):
-        if hasattr(self.bce, 'pos_weight') and self.bce.pos_weight is not None:
-            self.bce.pos_weight = self.bce.pos_weight.to(logits.device)
-        bce_loss = self.bce(logits, targets)
+        if self.pos_weight is not None:
+            bce_loss = F.binary_cross_entropy_with_logits(logits, targets, pos_weight=self.pos_weight)
+        else:
+            bce_loss = F.binary_cross_entropy_with_logits(logits, targets)
         dice_loss = self.dice(logits, targets)
         return self.bce_weight * bce_loss + self.dice_weight * dice_loss
 

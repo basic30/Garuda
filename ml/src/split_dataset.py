@@ -81,6 +81,6 @@ def split_dataset(images_root, masks_root, output_dir="ml/data/splits", seed=42)
     return train_csv, val_csv, test_csv
 
 if __name__ == "__main__":
-    images_dir = r"C:\Users\snaha\Desktop\test\images"
-    masks_dir = r"C:\Users\snaha\Desktop\test\masks"
+    images_dir = r"C:\Users\snaha\Downloads\train\images"
+    masks_dir = r"C:\Users\snaha\Downloads\train\masks"
     split_dataset(images_dir, masks_dir)

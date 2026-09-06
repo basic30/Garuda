@@ -92,9 +92,12 @@ def root():
 @app.api_route("/api/status", methods=["GET", "HEAD"])
 @app.api_route("/api/health", methods=["GET", "HEAD"])
 def system_status():
+    proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+    ckpt_abs = os.path.join(proj_root, "ml", "checkpoints", "best_model.pth")
+    checkpoint_exists = os.path.exists(ckpt_abs) or os.path.exists("ml/checkpoints/best_model.pth")
     return {
         "api_status": "ONLINE",
-        "model_checkpoint_exists": os.path.exists("ml/checkpoints/best_model.pth"),
+        "model_checkpoint_exists": checkpoint_exists,
         "aisstream_status": get_connection_status(),
         "environment": os.getenv("ENV", "development")
     }

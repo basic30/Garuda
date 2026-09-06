@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import segmentation_models_pytorch as smp
 
-def create_oil_spill_model(encoder_name="resnet34", encoder_weights=None, in_channels=3, classes=1):
+def create_oil_spill_model(encoder_name="resnet34", encoder_weights="imagenet", in_channels=3, classes=1):
     """
     Creates U-Net Segmentation Model using segmentation_models_pytorch.
     - encoder_name: ResNet34.

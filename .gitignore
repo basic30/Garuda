@@ -12,6 +12,7 @@ venv.bak/
 
 # ML Checkpoints & Datasets
 ml/checkpoints/*.pth
+!ml/checkpoints/best_model.pth
 ml/checkpoints/*.pt
 data/raw/
 data/processed/

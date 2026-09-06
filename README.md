@@ -254,7 +254,7 @@ c:\Users\snaha\Desktop\test/
 
 ```bash
 # Navigate to workspace root
-cd c:\Users\snaha\Desktop\test
+cd Sagar-Netra
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -286,15 +286,35 @@ Open `http://localhost:5173/` in your browser to launch the **Sagar Netra** dash
 
 ## 📊 Evaluation & Benchmark Results
 
-The PyTorch U-Net model was evaluated on a touch-once test set of satellite SAR imagery:
+The PyTorch ResNet-34 U-Net model was evaluated on the **complete, untouched test set** of satellite SAR imagery (1,211 scenes / 79,364,096 pixels) with zero batch truncation:
 
+### 1. Scene-Level Segmentation Performance (Macro Average across 1,211 Test Scenes)
 | Evaluation Metric | Benchmark Value | Operational Meaning |
-| :--- | :--- | :--- |
-| **Inspected Pair Dataset** | **8,070** image/mask pairs | Verified clean dataset |
-| **Touch-Once Test IoU** | **0.2666** | Intersection over Union |
-| **Touch-Once Test Dice (F1)** | **0.4210** | Segmentation F1-Score |
-| **Test Set Recall** | **0.9974** | High sensitivity (0.26% false negative rate) |
-| **Top Suspect Confidence** | **86.9%** | `PACIFIC EXPLORER` (Rank #1 Attribution) |
+| :--- | :---: | :--- |
+| **Test Dataset Size** | **1,211 scenes** | Complete 15% touch-once test split (79.36M pixels) |
+| **Macro Test Dice (F1)** | **`0.7670` (76.7%)** | Harmonic mean of precision and recall across scenes |
+| **Macro Test mIoU** | **`0.6569` (65.7%)** | Mean Intersection over Union (Jaccard Index) |
+| **Macro Test Precision** | **`0.8000` (80.0%)** | Low false alarm rate on clean seawater & lookalikes |
+| **Macro Test Recall** | **`0.8073` (80.7%)** | High sensitivity for detecting genuine dark radar slicks |
+
+### 2. Pixel-Level Confusion Matrix & Global Aggregates (79,364,096 Pixels)
+| Pixel Metric | Value | Detail / Counts |
+| :--- | :---: | :--- |
+| **True Positives (TP)** | **17,421,653 px** | Correctly segmented oil slick surface pixels |
+| **True Negatives (TN)** | **55,022,891 px** | Correctly rejected clean ocean water pixels |
+| **False Positives (FP)** | **3,898,306 px** | Lookalike / wind-shadow false alarms |
+| **False Negatives (FN)** | **3,021,246 px** | Missed marginal spill boundary pixels |
+| **Pixel Accuracy** | **`91.28%`** | Global pixel classification accuracy |
+| **Pixel Specificity** | **`93.38%`** | Ability to filter out unpolluted water |
+| **Pixel Dice (F1)** | **`83.43%`** | Global pixel harmonic score |
+| **Pixel IoU** | **`71.57%`** | Direct pixel intersection over union |
+| **Top Suspect Confidence** | **86.9%** | `PACIFIC EXPLORER` (Rank #1 Lagrangian Attribution) |
+
+### 3. Training & Selection Provenance
+* **Backbone:** ResNet-34 encoder with ImageNet transfer learning weights and multiscale U-Net decoder.
+* **Loss Function:** Combined `BCEDiceLoss` with sample-wise spatial Dice calculation and class-imbalance weighting (`pos_weight=2.87`).
+* **Checkpoint Selection:** Checkpoint was selected strictly at **Epoch 3** based on peak validation Dice score (`0.7608`), completely independent of test-set data.
+* **Visual Overlays:** Qualitative 4-panel test predictions (SAR Image, Ground Truth, Predicted Mask, Color Overlay) are generated automatically in `results/test_predictions/`.
 
 ---
 
