@@ -130,28 +130,24 @@ async def upload_and_detect_sar_image(
     try:
         raw_img = None
         file_ext = os.path.splitext(file_path)[1].lower()
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
 
-        # 1. For TIFF / GeoTIFF: memory-safe direct sub-sampled read (0.02s)
+        # 1. For TIFF / GeoTIFF: memory-safe direct sub-sampled read with capped GDAL cache
         if file_ext in ('.tif', '.tiff'):
             try:
                 import rasterio
-                with rasterio.open(file_path) as src:
-                    data = src.read(1, out_shape=(256, 256))
-                    if data is not None and data.size > 0:
-                        if data.dtype != np.uint8:
-                            data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-                        raw_img = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
+                from rasterio.enums import Resampling
+                with rasterio.Env(GDAL_CACHEMAX=16, VSI_CACHE=False):
+                    with rasterio.open(file_path) as src:
+                        data = src.read(1, out_shape=(256, 256), resampling=Resampling.bilinear)
+                        if data is not None and data.size > 0:
+                            if data.dtype != np.uint8:
+                                data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                            raw_img = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
             except Exception as ex:
                 print(f"Rasterio preview extract notice: {ex}", flush=True)
 
-        # 2. For standard web formats (PNG/JPG): OpenCV read
-        if raw_img is None:
-            try:
-                raw_img = cv2.imread(file_path, cv2.IMREAD_COLOR)
-            except Exception:
-                pass
-
-        # 3. Fallback to PIL with memory protection
+        # 2. Fallback to PIL with thumbnailing
         if raw_img is None:
             try:
                 from PIL import Image
@@ -162,18 +158,35 @@ async def upload_and_detect_sar_image(
             except Exception:
                 pass
 
+        # 3. For standard web formats (PNG/JPG): OpenCV read strictly on non-TIFF or small files (<5MB)
+        if raw_img is None and (file_ext not in ('.tif', '.tiff') or file_size < 5 * 1024 * 1024):
+            try:
+                raw_img = cv2.imread(file_path, cv2.IMREAD_COLOR)
+            except Exception:
+                pass
+
         if raw_img is not None:
             if raw_img.dtype != np.uint8:
                 raw_img = cv2.normalize(raw_img, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
             resized_preview = cv2.resize(raw_img, (256, 256))
             cv2.imwrite(preview_path, resized_preview)
         else:
-            shutil.copyfile(file_path, preview_path)
+            if file_ext not in ('.tif', '.tiff'):
+                shutil.copyfile(file_path, preview_path)
+            else:
+                # Fallback blank grayscale SAR frame
+                blank = np.full((256, 256, 3), 40, dtype=np.uint8)
+                cv2.imwrite(preview_path, blank)
     except Exception as e:
         print(f"Preview generation warning: {e}", flush=True)
-        shutil.copyfile(file_path, preview_path)
+        if file_ext not in ('.tif', '.tiff'):
+            shutil.copyfile(file_path, preview_path)
+        else:
+            blank = np.full((256, 256, 3), 40, dtype=np.uint8)
+            cv2.imwrite(preview_path, blank)
 
     # Run PyTorch U-Net Inference & Dark Anomaly Detection
+    # Using preview_path (or resized_preview) avoids re-decompressing 26MB TIFF in RAM
     retained_components = 0
     mask_out_path = preview_path
     try:
@@ -181,7 +194,10 @@ async def upload_and_detect_sar_image(
         ckpt_path = os.path.join(proj_root, "ml", "checkpoints", "best_model.pth")
         if not os.path.exists(ckpt_path):
             ckpt_path = "ml/checkpoints/best_model.pth"
-        inf_result = run_inference(file_path, checkpoint_path=ckpt_path, output_dir="outputs/masks")
+        
+        # Inference target: use the generated 256x256 preview image directly to protect 512MB RAM ceiling
+        inf_target = preview_path if os.path.exists(preview_path) else file_path
+        inf_result = run_inference(inf_target, checkpoint_path=ckpt_path, output_dir="outputs/masks")
         mask_out_path = inf_result["mask_out_path"]
         retained_components = inf_result["post_report"]["retained_spill_components"]
     except Exception as e:

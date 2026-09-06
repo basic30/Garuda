@@ -1,5 +1,19 @@
 import os
 import sys
+
+# Critical 512MB RAM environment limits for cloud hosting (Render Free Tier)
+os.environ["GDAL_CACHEMAX"] = "16"       # Cap GDAL internal block cache to 16MB
+os.environ["VSI_CACHE"] = "FALSE"        # Disable GDAL virtual filesystem caching
+os.environ["OMP_NUM_THREADS"] = "1"      # Restrict OpenMP thread pool to 1 thread
+os.environ["MKL_NUM_THREADS"] = "1"      # Restrict MKL thread pool to 1 thread
+os.environ["OPENBLAS_NUM_THREADS"] = "1" # Restrict OpenBLAS to 1 thread
+
+try:
+    import torch
+    torch.set_num_threads(1)
+except Exception:
+    pass
+
 import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

@@ -65,6 +65,11 @@ def get_oil_spill_model(checkpoint_path="ml/checkpoints/best_model.pth", device=
     if _MODEL_CACHE is not None:
         return _MODEL_CACHE, _MODEL_DEVICE
 
+    try:
+        torch.set_num_threads(1)
+    except Exception:
+        pass
+
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -74,8 +79,14 @@ def get_oil_spill_model(checkpoint_path="ml/checkpoints/best_model.pth", device=
         try:
             print(f"Loading PyTorch U-Net model from {checkpoint_path} onto {device}...", flush=True)
             model = create_oil_spill_model().to(device)
-            model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+            state = torch.load(checkpoint_path, map_location=device)
+            state_dict = state["model_state_dict"] if isinstance(state, dict) and "model_state_dict" in state else state
+            model.load_state_dict(state_dict)
             model.eval()
+            del state
+            del state_dict
+            import gc
+            gc.collect()
             _MODEL_CACHE = model
             print("PyTorch model cached successfully in memory.", flush=True)
             return _MODEL_CACHE, _MODEL_DEVICE
@@ -89,57 +100,85 @@ def get_oil_spill_model(checkpoint_path="ml/checkpoints/best_model.pth", device=
     return _MODEL_CACHE, _MODEL_DEVICE
 
 
-def run_inference(image_path,
+def run_inference(image_input,
                   checkpoint_path="ml/checkpoints/best_model.pth",
                   output_dir="outputs/masks",
                   threshold=0.5,
                   device=None):
 
-    if not os.path.exists(image_path):
-        raise FileNotFoundError(f"Input SAR image not found: {image_path}")
-
     # Load model from global singleton cache to prevent memory crash
     model, device = get_oil_spill_model(checkpoint_path=checkpoint_path, device=device)
 
-    # Read original image for sizing (fast sub-sampled loading for large TIFFs)
     orig_img = None
-    file_ext = os.path.splitext(image_path)[1].lower()
-    if file_ext in ('.tif', '.tiff'):
-        try:
-            import rasterio
-            with rasterio.open(image_path) as src:
-                data = src.read(1, out_shape=(512, 512))
-                if data is not None:
-                    if data.dtype != np.uint8:
-                        data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-                    orig_img = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
-        except Exception:
-            pass
+    file_path = image_input if isinstance(image_input, str) else None
 
-    if orig_img is None:
-        try:
-            from PIL import Image
-            with Image.open(image_path) as pimg:
-                pimg.thumbnail((512, 512))
-                orig_img = np.array(pimg.convert('RGB'))
-                orig_img = cv2.cvtColor(orig_img, cv2.COLOR_RGB2BGR)
-        except Exception:
-            orig_img = cv2.imread(image_path, cv2.IMREAD_COLOR)
+    if isinstance(image_input, np.ndarray):
+        orig_img = image_input.copy()
+    elif isinstance(image_input, str):
+        if not os.path.exists(image_input):
+            raise FileNotFoundError(f"Input SAR image not found: {image_input}")
+
+        file_ext = os.path.splitext(image_input)[1].lower()
+        file_size = os.path.getsize(image_input)
+
+        # 1. For TIFF / GeoTIFF: memory-safe decimated read (max 16MB GDAL cache)
+        if file_ext in ('.tif', '.tiff'):
+            try:
+                import rasterio
+                from rasterio.enums import Resampling
+                with rasterio.Env(GDAL_CACHEMAX=16, VSI_CACHE=False):
+                    with rasterio.open(image_input) as src:
+                        target_h = min(512, max(16, src.height))
+                        target_w = min(512, max(16, src.width))
+                        data = src.read(1, out_shape=(target_h, target_w), resampling=Resampling.bilinear)
+                        if data is not None and data.size > 0:
+                            if data.dtype != np.uint8:
+                                data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                            orig_img = cv2.cvtColor(data, cv2.COLOR_GRAY2BGR)
+            except Exception:
+                pass
+
+        # 2. PIL fallback with thumbnailing
+        if orig_img is None:
+            try:
+                from PIL import Image
+                Image.MAX_IMAGE_PIXELS = None
+                with Image.open(image_input) as pimg:
+                    pimg.thumbnail((512, 512))
+                    arr = np.array(pimg.convert('RGB'))
+                    orig_img = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+            except Exception:
+                pass
+
+        # 3. OpenCV fallback strictly for non-TIFFs or small files (<5MB)
+        if orig_img is None and (file_ext not in ('.tif', '.tiff') or file_size < 5 * 1024 * 1024):
+            try:
+                orig_img = cv2.imread(image_input, cv2.IMREAD_COLOR)
+            except Exception:
+                pass
 
     if orig_img is None:
         orig_img = np.zeros((256, 256, 3), dtype=np.uint8)
 
+    # Strictly clamp dimensions to max 512px to guarantee output arrays use <1MB RAM
     orig_h, orig_w = orig_img.shape[:2]
+    if max(orig_h, orig_w) > 512:
+        scale = 512.0 / max(orig_h, orig_w)
+        orig_w = max(16, int(orig_w * scale))
+        orig_h = max(16, int(orig_h * scale))
+        orig_img = cv2.resize(orig_img, (orig_w, orig_h), interpolation=cv2.INTER_AREA)
 
-    # Preprocess
-    img_tensor = preprocess_sar_image(image_path, target_size=(256, 256)).unsqueeze(0).to(device)
+    # Preprocess directly reusing in-memory image array (zero redundant disk I/O)
+    img_tensor = preprocess_sar_image(orig_img, target_size=(256, 256)).unsqueeze(0).to(device)
 
-    # Predict
-    with torch.no_grad():
+    # Predict with inference_mode to minimize memory overhead
+    with torch.inference_mode():
         logits = model(img_tensor)
-        probs = torch.sigmoid(logits).cpu().squeeze().numpy()
+        probs = torch.sigmoid(logits).squeeze().cpu().numpy()
+        del logits
+        del img_tensor
 
-    # Resize probability map back to original dimensions
+    # Resize probability map back to clamped dimensions
     prob_map_orig = cv2.resize(probs, (orig_w, orig_h), interpolation=cv2.INTER_LINEAR)
     raw_binary_mask = (prob_map_orig > threshold).astype(np.uint8)
 
@@ -169,7 +208,10 @@ def run_inference(image_path,
 
     # Generate professional 256x256 Cyan Mask Overlay image for web rendering
     os.makedirs(output_dir, exist_ok=True)
-    base_name = os.path.basename(image_path)
+    if isinstance(image_input, str):
+        base_name = os.path.basename(image_input)
+    else:
+        base_name = "sar_stream_input.png"
     base_stem = os.path.splitext(base_name)[0]
     mask_out_path = os.path.join(output_dir, f"spill_mask_{base_stem}.png")
 
@@ -187,7 +229,7 @@ def run_inference(image_path,
 
     cv2.imwrite(mask_out_path, blended)
 
-    report_out_path = os.path.join(output_dir, f"post_report_{os.path.splitext(base_name)[0]}.json")
+    report_out_path = os.path.join(output_dir, f"post_report_{base_stem}.json")
     with open(report_out_path, "w") as f:
         json.dump(post_report, f, indent=2)
 
@@ -195,7 +237,7 @@ def run_inference(image_path,
     gc.collect()
 
     return {
-        "image_path": image_path,
+        "image_path": image_input if isinstance(image_input, str) else mask_out_path,
         "mask_out_path": mask_out_path,
         "prob_map": prob_map_orig,
         "final_mask": final_mask,

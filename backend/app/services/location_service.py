@@ -230,7 +230,7 @@ def extract_image_coordinates(file_path: str):
             import rasterio
             from pyproj import Transformer
 
-            with rasterio.open(file_path) as src:
+            with rasterio.Env(GDAL_CACHEMAX=16, VSI_CACHE=False), rasterio.open(file_path) as src:
                 # Extract capture timestamp from TIFF tags
                 tags = src.tags()
                 raw_time = tags.get('TIFFTAG_DATETIME') or tags.get('DATETIME') or tags.get('DATE_TIME') or tags.get('TIFFTAG_DATETIME_ORIGINAL')
@@ -347,40 +347,43 @@ def validate_sar_image_characteristics(file_path: str):
     import cv2
     try:
         ext = os.path.splitext(file_path)[1].lower()
+        file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
         img = None
 
         # 1. Primary loader for TIFF / GeoTIFF: memory-safe sub-sampled read with rasterio
         if ext in ('.tif', '.tiff'):
             try:
                 import rasterio
-                with rasterio.open(file_path) as src:
-                    target_h = min(512, max(16, src.height))
-                    target_w = min(512, max(16, src.width))
-                    data = src.read(1, out_shape=(target_h, target_w))
-                    if data is not None and data.size > 0:
-                        if data.dtype != np.uint8:
-                            data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-                        img = data
+                from rasterio.enums import Resampling
+                with rasterio.Env(GDAL_CACHEMAX=16, VSI_CACHE=False):
+                    with rasterio.open(file_path) as src:
+                        target_h = min(256, max(16, src.height))
+                        target_w = min(256, max(16, src.width))
+                        data = src.read(1, out_shape=(target_h, target_w), resampling=Resampling.bilinear)
+                        if data is not None and data.size > 0:
+                            if data.dtype != np.uint8:
+                                data = cv2.normalize(data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+                            img = data
             except Exception as e:
                 print(f"Rasterio validation read notice: {e}", flush=True)
 
-        # 2. Try OpenCV for standard PNG/JPG or supported TIFFs
-        if img is None:
-            try:
-                img = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
-            except Exception:
-                pass
-
-        # 3. Fallback to PIL with memory protection
+        # 2. Fallback to PIL with thumbnailing
         if img is None:
             try:
                 from PIL import Image
                 Image.MAX_IMAGE_PIXELS = None
                 with Image.open(file_path) as pil_img:
-                    pil_img.thumbnail((512, 512))
+                    pil_img.thumbnail((256, 256))
                     img = np.array(pil_img)
             except Exception as e:
                 print(f"PIL validation read notice: {e}", flush=True)
+
+        # 3. OpenCV fallback strictly for standard non-TIFFs or small files (<5MB)
+        if img is None and (ext not in ('.tif', '.tiff') or file_size < 5 * 1024 * 1024):
+            try:
+                img = cv2.imread(file_path, cv2.IMREAD_UNCHANGED)
+            except Exception:
+                pass
 
         if img is None:
             return False, "Unable to decode image file format. Please ensure the file is a valid SAR image or GeoTIFF."
