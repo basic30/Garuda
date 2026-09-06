@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import segmentation_models_pytorch as smp
 
 def create_oil_spill_model(encoder_name="resnet34", encoder_weights="imagenet", in_channels=3, classes=1):
     """
@@ -8,7 +7,9 @@ def create_oil_spill_model(encoder_name="resnet34", encoder_weights="imagenet", 
     - encoder_name: ResNet34.
     - in_channels: 3 (matching actual RGB image channels).
     - classes: 1 (binary segmentation output logits).
+    Lazy-loads smp inside function to save ~140MB RAM when running TorchScript inference.
     """
+    import segmentation_models_pytorch as smp
     model = smp.Unet(
         encoder_name=encoder_name,
         encoder_weights=encoder_weights,

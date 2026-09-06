@@ -75,16 +75,45 @@ def get_oil_spill_model(checkpoint_path="ml/checkpoints/best_model.pth", device=
 
     _MODEL_DEVICE = device
 
+    # 1. Prefer compiled TorchScript model (best_model_traced.pt) - saves ~190MB RAM!
+    base_dir = os.path.dirname(checkpoint_path) if checkpoint_path else "ml/checkpoints"
+    traced_path = os.path.join(base_dir, "best_model_traced.pt")
+    if not os.path.exists(traced_path) and checkpoint_path and checkpoint_path.endswith(".pt"):
+        traced_path = checkpoint_path
+
+    if os.path.exists(traced_path):
+        try:
+            print(f"Loading ultra-low-RAM TorchScript model from {traced_path} onto {device}...", flush=True)
+            model = torch.jit.load(traced_path, map_location=device)
+            model.eval()
+            _MODEL_CACHE = model
+            print("TorchScript model cached successfully in memory (~345MB RAM).", flush=True)
+            return _MODEL_CACHE, _MODEL_DEVICE
+        except Exception as e:
+            print(f"Notice: TorchScript load failed ({e}), falling back to standard checkpoint.", flush=True)
+
+    # 2. Fallback to standard .pth checkpoint
     if os.path.exists(checkpoint_path):
         try:
             print(f"Loading PyTorch U-Net model from {checkpoint_path} onto {device}...", flush=True)
-            model = create_oil_spill_model().to(device)
+            model = create_oil_spill_model(encoder_weights=None).to(device)
             state = torch.load(checkpoint_path, map_location=device)
             state_dict = state["model_state_dict"] if isinstance(state, dict) and "model_state_dict" in state else state
             model.load_state_dict(state_dict)
             model.eval()
             del state
             del state_dict
+
+            # Auto-trace to TorchScript to drop intermediate Python module overhead
+            try:
+                dummy_in = torch.randn(1, 3, 256, 256).to(device)
+                with torch.no_grad():
+                    traced_m = torch.jit.trace(model, dummy_in)
+                del model
+                model = traced_m
+            except Exception:
+                pass
+
             import gc
             gc.collect()
             _MODEL_CACHE = model

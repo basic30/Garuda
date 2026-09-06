@@ -100,22 +100,11 @@ _PREPARED_LAND_MASK = prep(MultiPolygon([
     _EUROPE_LAND, _BRITAIN_LAND, _NORTH_AMERICA_LAND, _AUSTRALIA_LAND
 ]))
 
-_GLOBAL_LAND_MASK_MODULE = None
+# Use ultra-lightweight vector polygons (15 KB RAM) instead of global_land_mask (920 MB RAM)
+_GLOBAL_LAND_MASK_MODULE = False
 
 def _get_global_land_mask():
-    """Lazy loader for global_land_mask to prevent memory allocation on cloud unless needed."""
-    global _GLOBAL_LAND_MASK_MODULE
-    if _GLOBAL_LAND_MASK_MODULE is False:
-        return None
-    if _GLOBAL_LAND_MASK_MODULE is not None:
-        return _GLOBAL_LAND_MASK_MODULE
-    try:
-        from global_land_mask import globe
-        _GLOBAL_LAND_MASK_MODULE = globe
-        return _GLOBAL_LAND_MASK_MODULE
-    except ImportError:
-        _GLOBAL_LAND_MASK_MODULE = False
-        return None
+    return None
 
 import time
 _OPEN_METEO_LAST_FAIL_TIME = 0.0

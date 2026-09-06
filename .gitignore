@@ -14,6 +14,7 @@ venv.bak/
 ml/checkpoints/*.pth
 !ml/checkpoints/best_model.pth
 ml/checkpoints/*.pt
+!ml/checkpoints/best_model_traced.pt
 data/raw/
 data/processed/
 outputs/
