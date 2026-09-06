@@ -100,11 +100,35 @@ _PREPARED_LAND_MASK = prep(MultiPolygon([
     _EUROPE_LAND, _BRITAIN_LAND, _NORTH_AMERICA_LAND, _AUSTRALIA_LAND
 ]))
 
-# Use ultra-lightweight vector polygons (15 KB RAM) instead of global_land_mask (920 MB RAM)
-_GLOBAL_LAND_MASK_MODULE = False
+_GLOBAL_LAND_MASK_MODULE = None
+
+def _is_render_or_low_memory():
+    """Detect if running on Render free tier (512MB ceiling) or low-memory mode."""
+    if os.getenv("FORCE_GLOBAL_LAND_MASK", "").lower() in ("true", "1"):
+        return False
+    return bool(os.getenv("RENDER") or os.getenv("RENDER_SERVICE_ID") or os.getenv("LOW_MEMORY_MODE", "0") == "1")
 
 def _get_global_land_mask():
-    return None
+    """
+    Adaptive loader for global_land_mask:
+    - Bypassed on Render free tier to prevent 920MB RAM allocation (avoids 512MB OOM crash).
+    - Fully active when running locally on your computer.
+    """
+    global _GLOBAL_LAND_MASK_MODULE
+    if _is_render_or_low_memory():
+        return None
+    if _GLOBAL_LAND_MASK_MODULE is False:
+        return None
+    if _GLOBAL_LAND_MASK_MODULE is not None:
+        return _GLOBAL_LAND_MASK_MODULE
+    try:
+        from global_land_mask import globe
+        _GLOBAL_LAND_MASK_MODULE = globe
+        print("Running locally: full-resolution global_land_mask loaded.", flush=True)
+        return _GLOBAL_LAND_MASK_MODULE
+    except ImportError:
+        _GLOBAL_LAND_MASK_MODULE = False
+        return None
 
 import time
 _OPEN_METEO_LAST_FAIL_TIME = 0.0
