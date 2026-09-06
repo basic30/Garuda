@@ -174,6 +174,9 @@ async def upload_and_detect_sar_image(
         shutil.copyfile(file_path, preview_path)
 
     # Run PyTorch U-Net Inference & Dark Anomaly Detection
+    retained_components = 0
+    mask_out_path = preview_path
+    try:
         proj_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
         ckpt_path = os.path.join(proj_root, "ml", "checkpoints", "best_model.pth")
         if not os.path.exists(ckpt_path):
