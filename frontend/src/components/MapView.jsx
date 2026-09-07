@@ -110,7 +110,8 @@ export default function MapView({
   mapStyle,
   setMapStyle,
   timelineHour = 0,
-  activeTab = 'map'
+  activeTab = 'map',
+  focusedVesselMmsi
 }) {
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
@@ -660,6 +661,21 @@ export default function MapView({
       });
     }
   }, [vessels, layerToggles.historicalVessels, timelineHour]);
+
+  // Pan and smooth-zoom map viewport to focused vessel track
+  useEffect(() => {
+    if (!focusedVesselMmsi || !vessels || !mapRef.current) return;
+    const vessel = vessels.find(v => v.mmsi === focusedVesselMmsi);
+    if (vessel && vessel.waypoints && vessel.waypoints.length > 0) {
+      const midIdx = Math.floor(vessel.waypoints.length / 2);
+      const wp = vessel.waypoints[midIdx] || vessel.waypoints[0];
+      try {
+        mapRef.current.flyTo([wp.lat, wp.lon], 12, { animate: true, duration: 1.2 });
+      } catch (err) {
+        console.warn('flyTo error:', err);
+      }
+    }
+  }, [focusedVesselMmsi, vessels]);
 
   // 9. Render Live AIS Vessels Layer (Smooth sliding position interpolation & course rotation)
   useEffect(() => {

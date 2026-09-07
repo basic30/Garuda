@@ -195,27 +195,27 @@ export default function App() {
     }
   };
 
-  // Invalidate map size whenever activeTab changes to map
+  // Invalidate map size whenever activeTab changes (width shifts between 8 and 6-7 cols)
   useEffect(() => {
-    if (activeTab === 'map') {
-      const timer = setTimeout(() => {
-        window.dispatchEvent(new Event('resize'));
-      }, 150);
-      return () => clearTimeout(timer);
-    }
+    const timer = setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+    }, 150);
+    return () => clearTimeout(timer);
   }, [activeTab]);
+
+  const [focusedVesselMmsi, setFocusedVesselMmsi] = useState(null);
 
   return (
     <div className="h-screen flex flex-col bg-slate-950 text-slate-100 overflow-hidden">
       <Navbar liveStatus={liveStatus} activeTab={activeTab} setActiveTab={setActiveTab} />
 
       <main className="flex-1 max-w-[1920px] mx-auto w-full h-[calc(100vh-53px)] lg:h-[calc(100vh-65px)] overflow-hidden lg:p-4 lg:grid lg:grid-cols-12 lg:gap-4 pb-14 lg:pb-0">
-        {/* Left Side GIS Map (Desktop: 8 cols in 'map' tab, 7 cols in 'vessels' tab; Mobile: full screen when activeTab === 'map') */}
+        {/* Left Side GIS Map (Desktop: 8 cols in 'map' tab, 6-7 cols in 'vessels' tab; Mobile: full screen when activeTab === 'map') */}
         <div
           className={`h-full flex-col gap-2 sm:gap-3 overflow-hidden transition-all duration-300 ${
             activeTab === 'map' ? 'flex' : 'hidden lg:flex'
           } ${
-            activeTab === 'vessels' ? 'lg:col-span-7' : 'lg:col-span-8'
+            activeTab === 'vessels' ? 'lg:col-span-6 xl:col-span-7' : 'lg:col-span-8'
           } p-2 sm:p-3 lg:p-0`}
         >
           <div className="flex-1 relative min-h-0">
@@ -235,6 +235,7 @@ export default function App() {
                 setMapStyle={setMapStyle}
                 timelineHour={timelineHour}
                 activeTab={activeTab}
+                focusedVesselMmsi={focusedVesselMmsi}
               />
             </ErrorBoundary>
           </div>
@@ -255,8 +256,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Right Side Panels for Desktop (4 cols in 'map' tab) OR Mobile Dedicated Views */}
-        
         {/* Mobile View: Dedicated Spill Info Tab */}
         <div
           className={`h-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 touch-scroll pb-16 ${
@@ -291,7 +290,9 @@ export default function App() {
 
         {/* Desktop Right Column (when activeTab !== 'vessels') */}
         <div
-          className={`hidden lg:flex lg:col-span-4 flex-col gap-4 overflow-y-auto h-full pr-1.5 pb-6`}
+          className={`${
+            activeTab !== 'vessels' ? 'hidden lg:flex lg:col-span-4' : 'hidden'
+          } flex-col gap-4 overflow-y-auto h-full pr-1.5 pb-6`}
         >
           <IncidentDetails
             incident={selectedIncident}
@@ -309,16 +310,34 @@ export default function App() {
             originGeojson={originGeojson}
             onRefreshTelemetry={handleRefreshTelemetry}
           />
-          <VesselRanking vessels={vessels} />
+          <VesselRanking
+            vessels={vessels}
+            incident={selectedIncident}
+            allIncidents={allIncidents}
+            onSelectIncident={selectIncident}
+            isDedicatedTab={false}
+            focusedVesselMmsi={focusedVesselMmsi}
+            setFocusedVesselMmsi={setFocusedVesselMmsi}
+          />
         </div>
 
-        {/* Vessels View: Full Vessel Ranking (Desktop 5 cols in 'vessels' tab, Mobile full screen in 'vessels' tab) */}
+        {/* Vessels View: Full Vessel Ranking (Desktop 6/5 cols in 'vessels' tab, Mobile full screen in 'vessels' tab) */}
         <div
           className={`h-full flex-col gap-4 overflow-y-auto p-3 sm:p-4 lg:p-0 lg:pr-1.5 lg:pb-6 touch-scroll pb-16 ${
-            activeTab === 'vessels' ? 'flex lg:col-span-5' : 'hidden'
+            activeTab === 'vessels' ? 'flex lg:col-span-6 xl:col-span-5' : 'hidden'
           }`}
         >
-          <VesselRanking vessels={vessels} />
+          <VesselRanking
+            vessels={vessels}
+            incident={selectedIncident}
+            allIncidents={allIncidents}
+            onSelectIncident={selectIncident}
+            onRunBackwardOrigin={handleRunBackwardOrigin}
+            isOriginLoading={isOriginLoading}
+            isDedicatedTab={true}
+            focusedVesselMmsi={focusedVesselMmsi}
+            setFocusedVesselMmsi={setFocusedVesselMmsi}
+          />
         </div>
       </main>
 
