@@ -7,6 +7,7 @@ import VesselRanking from './components/VesselRanking';
 import ForecastPanel from './components/ForecastPanel';
 import UploadModal from './components/UploadModal';
 import ErrorBoundary from './components/ErrorBoundary';
+import { getClientId } from './utils/clientId';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('map');
@@ -45,9 +46,10 @@ export default function App() {
 
   const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
-  // Load all global spill incidents and geometries on startup
+  // Load baseline incidents and device-isolated user uploads on startup
   useEffect(() => {
-    fetch(`${API_BASE}/incidents`)
+    const cid = getClientId();
+    fetch(`${API_BASE}/incidents?client_id=${encodeURIComponent(cid)}`)
       .then(res => res.json())
       .then(data => {
         setAllIncidents(data);
@@ -57,7 +59,7 @@ export default function App() {
       })
       .catch(console.error);
 
-    fetch(`${API_BASE}/incidents/all-geometry`)
+    fetch(`${API_BASE}/incidents/all-geometry?client_id=${encodeURIComponent(cid)}`)
       .then(res => res.json())
       .then(setAllGeometries)
       .catch(console.error);
@@ -180,18 +182,55 @@ export default function App() {
     }
   };
 
-  // Handle successful SAR upload
+  // Handle successful SAR upload (device-isolated)
   const handleUploadSuccess = (uploadData) => {
     if (uploadData && uploadData.incident) {
       const newInc = uploadData.incident;
-      setAllIncidents(prev => [newInc, ...prev]);
+      setAllIncidents(prev => [newInc, ...prev.filter(i => i.incident_id !== newInc.incident_id)]);
 
-      fetch(`${API_BASE}/incidents/all-geometry`)
+      const cid = getClientId();
+      fetch(`${API_BASE}/incidents/all-geometry?client_id=${encodeURIComponent(cid)}`)
         .then(res => res.json())
         .then(setAllGeometries)
         .catch(console.error);
 
       selectIncident(newInc.incident_id);
+    }
+  };
+
+  // Delete user-uploaded incident from backend & local state
+  const handleDeleteIncident = async (incidentId) => {
+    if (!window.confirm(`Are you sure you want to delete uploaded incident "${incidentId}"? This will remove its detection data, simulation masks, and maps.`)) {
+      return;
+    }
+    try {
+      const cid = getClientId();
+      const res = await fetch(`${API_BASE}/incidents/${encodeURIComponent(incidentId)}?client_id=${encodeURIComponent(cid)}`, {
+        method: 'DELETE'
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to delete incident.');
+      }
+
+      setAllIncidents(prev => {
+        const remaining = prev.filter(inc => inc.incident_id !== incidentId);
+        if (selectedIncident?.incident_id === incidentId && remaining.length > 0) {
+          selectIncident(remaining[0].incident_id);
+        }
+        return remaining;
+      });
+
+      setAllGeometries(prev => {
+        if (!prev || !prev.features) return prev;
+        return {
+          ...prev,
+          features: prev.features.filter(f => f.properties?.incident_id !== incidentId && f.id !== incidentId)
+        };
+      });
+    } catch (err) {
+      console.error('Error deleting incident:', err);
+      alert(`Could not delete incident: ${err.message}`);
     }
   };
 
@@ -269,6 +308,7 @@ export default function App() {
             onRunForwardDrift={handleRunForwardDrift}
             onRunBackwardOrigin={handleRunBackwardOrigin}
             onOpenUploadModal={() => setIsUploadOpen(true)}
+            onDeleteIncident={handleDeleteIncident}
             isForwardLoading={isForwardLoading}
             isOriginLoading={isOriginLoading}
           />
@@ -301,6 +341,7 @@ export default function App() {
             onRunForwardDrift={handleRunForwardDrift}
             onRunBackwardOrigin={handleRunBackwardOrigin}
             onOpenUploadModal={() => setIsUploadOpen(true)}
+            onDeleteIncident={handleDeleteIncident}
             isForwardLoading={isForwardLoading}
             isOriginLoading={isOriginLoading}
           />
@@ -318,6 +359,7 @@ export default function App() {
             isDedicatedTab={false}
             focusedVesselMmsi={focusedVesselMmsi}
             setFocusedVesselMmsi={setFocusedVesselMmsi}
+            onDeleteIncident={handleDeleteIncident}
           />
         </div>
 
@@ -337,6 +379,7 @@ export default function App() {
             isDedicatedTab={true}
             focusedVesselMmsi={focusedVesselMmsi}
             setFocusedVesselMmsi={setFocusedVesselMmsi}
+            onDeleteIncident={handleDeleteIncident}
           />
         </div>
       </main>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Anchor, Search, Filter, AlertTriangle, ShieldAlert, Navigation, Compass, Globe, MapPin, Radio, ChevronRight, CheckCircle, Crosshair } from 'lucide-react';
+import { Anchor, Search, Filter, AlertTriangle, ShieldAlert, Navigation, Compass, Globe, MapPin, Radio, ChevronRight, CheckCircle, Crosshair, Trash2 } from 'lucide-react';
 
 export default function VesselRanking({
   vessels,
@@ -10,13 +10,16 @@ export default function VesselRanking({
   isOriginLoading,
   isDedicatedTab = false,
   focusedVesselMmsi,
-  setFocusedVesselMmsi
+  setFocusedVesselMmsi,
+  onDeleteIncident
 }) {
   const [viewMode, setViewMode] = useState('spill_candidates'); // 'spill_candidates' | 'full_dataset'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedType, setSelectedType] = useState('All');
   const [fullDataset, setFullDataset] = useState([]);
   const [loadingDataset, setLoadingDataset] = useState(false);
+
+  const isUserUpload = incident?.incident_id?.startsWith('INC-UPLOAD') || incident?.is_user_upload;
 
   const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api';
 
@@ -65,15 +68,20 @@ export default function VesselRanking({
                 <ShieldAlert className="w-3 h-3 text-orange-400" />
                 Active Spill Incident
               </span>
+              {isUserUpload && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 uppercase">
+                  Custom Upload
+                </span>
+              )}
               <span className="text-xs text-slate-300 font-mono font-semibold">ID: {incident?.incident_id || 'N/A'}</span>
             </div>
 
-            {allIncidents && allIncidents.length > 0 && (
-              <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              {allIncidents && allIncidents.length > 0 && (
                 <select
                   value={incident?.incident_id || ''}
                   onChange={(e) => onSelectIncident && onSelectIncident(e.target.value)}
-                  className="w-full sm:max-w-[300px] bg-slate-950 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer shadow-inner"
+                  className="w-full sm:max-w-[280px] bg-slate-950 border border-slate-700 text-slate-100 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:border-cyan-500 cursor-pointer shadow-inner"
                   title="Switch target oil spill incident"
                 >
                   {allIncidents.map(inc => (
@@ -82,8 +90,19 @@ export default function VesselRanking({
                     </option>
                   ))}
                 </select>
-              </div>
-            )}
+              )}
+
+              {isUserUpload && onDeleteIncident && (
+                <button
+                  onClick={() => onDeleteIncident(incident.incident_id)}
+                  className="px-2.5 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-400 border border-rose-500/40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm"
+                  title="Delete this uploaded SAR incident"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Delete Upload</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">

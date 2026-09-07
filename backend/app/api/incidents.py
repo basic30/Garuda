@@ -240,14 +240,113 @@ def _initialize_indian_ocean_incidents():
 _initialize_indian_ocean_incidents()
 
 @router.get("")
-def list_incidents():
-    """List all detected oil spill incidents across Indian Ocean shipping routes."""
-    return GLOBAL_INCIDENTS_CACHE
+def list_incidents(client_id: str = Query(None)):
+    """
+    List all detected oil spill incidents across Indian Ocean shipping routes.
+    Includes user uploads strictly scoped to the requesting client_id (device-isolated).
+    """
+    if not client_id:
+        return [
+            inc for inc in GLOBAL_INCIDENTS_CACHE
+            if not inc.get("is_user_upload") and not inc.get("incident_id", "").startswith("INC-UPLOAD")
+        ]
+
+    return [
+        inc for inc in GLOBAL_INCIDENTS_CACHE
+        if (not inc.get("is_user_upload") and not inc.get("incident_id", "").startswith("INC-UPLOAD"))
+        or (inc.get("client_id") == client_id)
+    ]
 
 @router.get("/all-geometry")
-def get_all_incidents_geometry():
-    """Retrieve GeoJSON FeatureCollection of all Indian Ocean spill polygons."""
-    return GLOBAL_GEOMETRIES_CACHE
+def get_all_incidents_geometry(client_id: str = Query(None)):
+    """
+    Retrieve GeoJSON FeatureCollection of all Indian Ocean spill polygons.
+    Filters out private uploads belonging to other client devices.
+    """
+    raw_features = GLOBAL_GEOMETRIES_CACHE.get("features", [])
+    if not client_id:
+        filtered = [
+            f for f in raw_features
+            if not f.get("properties", {}).get("is_user_upload")
+            and not f.get("properties", {}).get("incident_id", "").startswith("INC-UPLOAD")
+        ]
+    else:
+        filtered = [
+            f for f in raw_features
+            if (not f.get("properties", {}).get("is_user_upload")
+                and not f.get("properties", {}).get("incident_id", "").startswith("INC-UPLOAD"))
+            or (f.get("properties", {}).get("client_id") == client_id)
+        ]
+    return {
+        "type": "FeatureCollection",
+        "features": filtered
+    }
+
+@router.delete("/{incident_id}")
+def delete_incident(incident_id: str, client_id: str = Query(None)):
+    """
+    Delete a user-uploaded spill incident and remove associated preview and mask artifacts.
+    Standard baseline system incidents cannot be deleted.
+    """
+    global GLOBAL_INCIDENTS_CACHE, GLOBAL_GEOMETRIES_CACHE
+
+    target_idx = -1
+    target_inc = None
+    for idx, inc in enumerate(GLOBAL_INCIDENTS_CACHE):
+        if inc.get("incident_id") == incident_id:
+            target_idx = idx
+            target_inc = inc
+            break
+
+    if target_idx == -1 or not target_inc:
+        raise HTTPException(status_code=404, detail=f"Incident '{incident_id}' not found.")
+
+    is_upload = target_inc.get("is_user_upload") or incident_id.startswith("INC-UPLOAD")
+    if not is_upload:
+        raise HTTPException(status_code=403, detail="Standard baseline system incidents cannot be deleted.")
+
+    if target_inc.get("client_id") and client_id and target_inc.get("client_id") != client_id:
+        raise HTTPException(status_code=403, detail="Unauthorized: You cannot delete uploads created on another device.")
+
+    # Remove from memory
+    deleted_inc = GLOBAL_INCIDENTS_CACHE.pop(target_idx)
+
+    # Remove from geometry cache
+    if "features" in GLOBAL_GEOMETRIES_CACHE:
+        GLOBAL_GEOMETRIES_CACHE["features"] = [
+            f for f in GLOBAL_GEOMETRIES_CACHE["features"]
+            if f.get("properties", {}).get("incident_id") != incident_id
+            and f.get("id") != incident_id
+        ]
+
+    # Clean up uploaded files and mask outputs from disk
+    for key in ["sar_image_url", "prediction_image_url"]:
+        url_val = deleted_inc.get(key, "")
+        if url_val:
+            clean_rel = url_val.lstrip("/")
+            if os.path.exists(clean_rel) and ("uploads" in clean_rel or "previews" in clean_rel or "masks" in clean_rel):
+                try:
+                    os.remove(clean_rel)
+                except Exception as err:
+                    print(f"File cleanup notice: {err}", flush=True)
+
+    # Also clean up any raw upload file in data/raw/uploads matching this upload id
+    if incident_id.startswith("INC-UPLOAD-"):
+        upload_suffix = incident_id.replace("INC-UPLOAD-", "")
+        raw_upload_dir = "data/raw/uploads"
+        if os.path.exists(raw_upload_dir):
+            for fname in os.listdir(raw_upload_dir):
+                if upload_suffix in fname:
+                    try:
+                        os.remove(os.path.join(raw_upload_dir, fname))
+                    except Exception as err:
+                        print(f"Raw upload cleanup notice: {err}", flush=True)
+
+    return {
+        "status": "success",
+        "message": f"Uploaded incident '{incident_id}' deleted successfully.",
+        "incident_id": incident_id
+    }
 
 @router.get("/{incident_id}/telemetry")
 def get_incident_live_telemetry(incident_id: str):
@@ -292,14 +391,14 @@ def get_incident_details(incident_id: str):
 @router.get("/{incident_id}/geometry")
 def get_incident_geometry(incident_id: str):
     """Retrieve spatial GeoJSON geometry polygon for a specific incident."""
-    for feat in GLOBAL_GEOMETRIES_CACHE["features"]:
-        if feat["properties"]["incident_id"] == incident_id:
+    for feat in GLOBAL_GEOMETRIES_CACHE.get("features", []):
+        if feat.get("properties", {}).get("incident_id") == incident_id or feat.get("id") == incident_id:
             return {
                 "type": "Feature",
                 "geometry": feat["geometry"],
                 "properties": feat["properties"]
             }
-    return GLOBAL_GEOMETRIES_CACHE["features"][0]
+    raise HTTPException(status_code=404, detail=f"Geometry for incident '{incident_id}' not found")
 
 @router.get("/{incident_id}/origin")
 def get_incident_origin(incident_id: str, back_hours: int = Query(24, ge=6, le=48)):

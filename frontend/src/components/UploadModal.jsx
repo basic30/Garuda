@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Upload, X, CheckCircle2, AlertCircle, FileImage, Loader2, Compass, Waves } from 'lucide-react';
 import { extractClientMetadata, getOptimizedUploadPayload, isClientCoordinateOnLand } from '../utils/sarMetadata';
+import { getClientId } from '../utils/clientId';
 
 const API_BASE = import.meta.env.VITE_API_URL || (typeof window !== 'undefined' && window.location.origin.includes('5173') ? 'http://127.0.0.1:8000/api' : '/api');
 
@@ -178,6 +179,7 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
     }
     formData.append('latitude', lat);
     formData.append('longitude', lon);
+    formData.append('client_id', getClientId());
 
     try {
       const response = await fetch(`${API_BASE}/detection/upload`, {

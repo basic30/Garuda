@@ -56,7 +56,8 @@ async def upload_and_detect_sar_image(
     file: UploadFile = File(None),
     temp_file_id: str = Form(None),
     latitude: float = Form(1.2415),
-    longitude: float = Form(103.7850)
+    longitude: float = Form(103.7850),
+    client_id: str = Form(None)
 ):
     """
     Custom SAR Satellite Image Upload & Live Detection Endpoint:
@@ -248,7 +249,9 @@ async def upload_and_detect_sar_image(
         "centroid": [latitude, longitude],
         "status": "Active / Newly Detected",
         "created_at": now_iso,
-        "forcing": _fast_location_forcing(latitude, longitude)
+        "forcing": _fast_location_forcing(latitude, longitude),
+        "is_user_upload": True,
+        "client_id": client_id
     }
 
     feature = {
@@ -260,7 +263,9 @@ async def upload_and_detect_sar_image(
             "location_name": new_incident["location_name"],
             "spill_area_sqkm": area_sqkm,
             "confidence": 0.958,
-            "status": "Active"
+            "status": "Active",
+            "is_user_upload": True,
+            "client_id": client_id
         }
     }
 
