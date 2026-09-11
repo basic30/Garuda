@@ -10,15 +10,15 @@ export default function Navbar({ liveStatus, activeTab, setActiveTab }) {
         <div className="flex items-center gap-2.5 sm:gap-3">
           <div className="relative w-9 h-9 sm:w-11 sm:h-11 rounded-xl overflow-hidden bg-white/95 border border-cyan-500/50 p-0.5 shadow-lg shadow-cyan-950/60 shrink-0 flex items-center justify-center transition-all hover:scale-105">
             <img
-              src="/sagar_netra_logo.jpeg"
-              alt="Sagar Netra Logo Emblem"
+              src="/garuda.png"
+              alt="Garuda Logo Emblem"
               className="w-full h-full object-contain"
             />
           </div>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-base sm:text-lg font-bold tracking-tight bg-gradient-to-r from-white via-cyan-100 to-cyan-300 bg-clip-text text-transparent">
-                Sagar Netra
+                GARUDA
               </h1>
               <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-cyan-950/80 border border-cyan-500/30 text-cyan-400 sm:hidden">
                 v2.0
