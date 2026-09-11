@@ -9,7 +9,7 @@
 
 An operational, end-to-end Geospatial Information System (GIS) platform for automated **marine oil spill detection** from Synthetic Aperture Radar (SAR) satellite imagery, **forward Lagrangian drift forecasting**, **backward probable origin tracing**, and **explainable multi-factor vessel attribution** using historical and real-time AIS marine telemetry.
 
----
+--- 
 
 ## 📋 Table of Contents
 
