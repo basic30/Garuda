@@ -62,7 +62,7 @@ export default function Navbar({ liveStatus, activeTab, setActiveTab }) {
           <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/80 border border-slate-800">
             <Cpu className="w-3.5 h-3.5 text-cyan-400" />
             <span className="text-slate-400">ML Model:</span>
-            <span className="text-emerald-400 font-semibold">U-Net</span>
+            <span className="text-emerald-400 font-semibold">SegFormer-B2</span>
           </div>
 
           {/* Live AIS Status (Desktop/Tablet) */}
