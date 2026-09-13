@@ -153,7 +153,7 @@ export default function IncidentDetails({
       <div className="space-y-3 pt-2 border-t border-slate-800">
         <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
           <Eye className="w-4 h-4 text-cyan-400" />
-          SAR Satellite Imagery & U-Net Predictions
+          SAR Satellite Imagery & SegFormer-B2 Predictions
         </h4>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -172,7 +172,7 @@ export default function IncidentDetails({
 
           <div className="glass-card p-2 sm:p-2.5 rounded-xl border border-slate-800">
             <div className="text-[11px] font-mono text-slate-400 mb-2 flex items-center justify-between">
-              <span>U-Net Mask Prediction</span>
+              <span>SegFormer-B2 Prediction</span>
               <span className="text-cyan-400 font-semibold">
                 IoU: {incident?.iou_score ? Number(incident.iou_score).toFixed(4) : (incident?.confidence ? (incident.confidence * 0.92).toFixed(4) : '0.8654')}
               </span>
