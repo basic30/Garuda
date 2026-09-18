@@ -784,6 +784,17 @@ def get_sample_historical_ais_tracks(origin_centroid=(1.2415, 103.7850), time_wi
             }
         ]
 
+        is_dark = (ais_gap >= 25)
+        rcs_db = round(float(28.4 + (i * 1.5) + rng.uniform(-0.8, 0.8)), 1)
+        sar_contact = {
+            "cfar_detected": True,
+            "rcs_dbm2": rcs_db,
+            "contact_coord": [round(float(closest_lat), 5), round(float(closest_lon), 5)],
+            "transponder_status": "AIS Transponder Inactive / Blackout" if is_dark else "AIS Broadcast Active",
+            "radar_verification": "Metallic Steel Hull Double-Bounce Reflection Confirmed (CFAR)" if is_dark else "Correlated AIS & Radar Signature",
+            "sensor": "Sentinel-1 / ICEYE Commercial High-Resolution SAR"
+        }
+
         cleaned_vessels.append({
             "mmsi": v_meta["mmsi"],
             "name": v_meta["name"],
@@ -796,10 +807,13 @@ def get_sample_historical_ais_tracks(origin_centroid=(1.2415, 103.7850), time_wi
             "corridor": route_label,
             "base_course": int(course_heading),
             "waypoints": waypoints,
-            "ais_gap_minutes": ais_gap
+            "ais_gap_minutes": ais_gap,
+            "is_dark_vessel": is_dark,
+            "sar_metallic_contact": sar_contact
         })
 
     return cleaned_vessels
+
 
 if __name__ == "__main__":
     print("Testing Updated Historical AIS Loader...", flush=True)

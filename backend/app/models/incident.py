@@ -10,7 +10,7 @@ class IncidentModel(Base):
     incident_id = Column(String, primary_key=True, index=True)
     detection_time = Column(DateTime, default=datetime.datetime.utcnow)
     source_image = Column(String, nullable=False)
-    confidence = Column(Float, default=0.92)
+    confidence = Column(Float, default=0.765)
     spill_area_sqkm = Column(Float, nullable=False)
     centroid_lat = Column(Float, nullable=False)
     centroid_lon = Column(Float, nullable=False)

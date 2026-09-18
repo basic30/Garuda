@@ -28,7 +28,9 @@ export default function App() {
 
   // Map & Timeline States
   const [mapStyle, setMapStyle] = useState('carto_voyager');
+  const [simulationMode, setSimulationMode] = useState('forward'); // 'forward' | 'backward'
   const [timelineHour, setTimelineHour] = useState(0);
+  const [backwardStepIdx, setBackwardStepIdx] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
 
@@ -118,7 +120,9 @@ export default function App() {
     }));
     setOriginGeojson(null);
     setForecastData(null);
+    setSimulationMode('forward');
     setTimelineHour(0);
+    setBackwardStepIdx(0);
     setIsPlaying(false);
 
     fetch(`${API_BASE}/incidents/${incidentId}`)
@@ -141,6 +145,7 @@ export default function App() {
   const handleRunForwardDrift = () => {
     if (!selectedIncident) return;
     setIsForwardLoading(true);
+    setSimulationMode('forward');
 
     fetch(`${API_BASE}/incidents/${selectedIncident.incident_id}/forecast`)
       .then(r => r.json())
@@ -148,6 +153,7 @@ export default function App() {
         setForecastData(data);
         setIsForwardLoading(false);
         setLayerToggles(prev => ({ ...prev, forecast: true, forecast_6h: true, forecast_12h: true, forecast_24h: true, forecast_48h: true }));
+        setTimelineHour(0);
         setIsPlaying(true);
       })
       .catch(() => setIsForwardLoading(false));
@@ -157,6 +163,7 @@ export default function App() {
   const handleRunBackwardOrigin = () => {
     if (!selectedIncident) return;
     setIsOriginLoading(true);
+    setSimulationMode('backward');
 
     fetch(`${API_BASE}/incidents/${selectedIncident.incident_id}/origin`)
       .then(r => r.json())
@@ -164,6 +171,8 @@ export default function App() {
         setOriginGeojson(data);
         setIsOriginLoading(false);
         setLayerToggles(prev => ({ ...prev, origin: true }));
+        setBackwardStepIdx(0);
+        setIsPlaying(true);
       })
       .catch(() => setIsOriginLoading(false));
   };
@@ -275,15 +284,21 @@ export default function App() {
                 timelineHour={timelineHour}
                 activeTab={activeTab}
                 focusedVesselMmsi={focusedVesselMmsi}
+                simulationMode={simulationMode}
+                backwardStepIdx={backwardStepIdx}
               />
             </ErrorBoundary>
           </div>
 
-          {/* Interactive Timeline Animation Slider */}
+          {/* Interactive Timeline Animation Slider (Unified Forward / Backward Controller) */}
           <div className="shrink-0">
             <TimelineSlider
+              simulationMode={simulationMode}
+              setSimulationMode={setSimulationMode}
               timelineHour={timelineHour}
               setTimelineHour={setTimelineHour}
+              backwardStepIdx={backwardStepIdx}
+              setBackwardStepIdx={setBackwardStepIdx}
               isPlaying={isPlaying}
               setIsPlaying={setIsPlaying}
               playbackSpeed={playbackSpeed}
@@ -291,6 +306,8 @@ export default function App() {
               forecastData={forecastData}
               originGeojson={originGeojson}
               selectedIncident={selectedIncident}
+              onRunForwardDrift={handleRunForwardDrift}
+              onRunBackwardOrigin={handleRunBackwardOrigin}
             />
           </div>
         </div>

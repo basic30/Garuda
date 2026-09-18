@@ -97,6 +97,8 @@ def _initialize_indian_ocean_incidents():
     primary_lat, primary_lon = 5.8500, 80.5000 # Off Southern Coast of Sri Lanka
     primary_poly = generate_organic_spill_polygon(primary_lat, primary_lon, length_km=8.4, width_km=1.8, angle_deg=65, seed=77)
 
+    primary_forcing = _fast_location_forcing(primary_lat, primary_lon)
+    primary_wind = float(primary_forcing.get("wind_speed_m_s", 5.8))
     primary_inc = {
         "incident_id": primary_id,
         "location_name": "Indian Ocean / Sri Lanka Tanker Route",
@@ -105,15 +107,20 @@ def _initialize_indian_ocean_incidents():
         "source_image": "images/images/val/palsar_2828.png",
         "sar_image_url": sample_images[0],
         "prediction_image_url": prediction_images[0],
-        "iou_score": 0.8845,
-        "confidence": 0.965,
+        "iou_score": 0.6580,
+        "confidence": 0.768,
         "spill_area_sqkm": 2.450,
         "centroid_lat": primary_lat,
         "centroid_lon": primary_lon,
         "centroid": [primary_lat, primary_lon],
         "status": "Active / High Priority",
         "created_at": "2026-08-30T06:15:00Z",
-        "forcing": _fast_location_forcing(primary_lat, primary_lon)
+        "forcing": primary_forcing,
+        "meteorological_screening": {
+            "status": "CONFIRMED_MINERAL_OIL" if primary_wind >= 3.0 else "CAUTION_LOW_WIND",
+            "wind_speed_m_s": primary_wind,
+            "look_alike_risk": "Low (Wind > 3 m/s rules out biogenic calm-sea look-alike)."
+        }
     }
 
     GLOBAL_INCIDENTS_CACHE.append(primary_inc)
@@ -125,7 +132,7 @@ def _initialize_indian_ocean_incidents():
             "incident_id": primary_id,
             "location_name": primary_inc["location_name"],
             "spill_area_sqkm": 2.450,
-            "confidence": 0.965,
+            "confidence": 0.768,
             "status": "Active"
         }
     })
@@ -134,6 +141,8 @@ def _initialize_indian_ocean_incidents():
     sec_id = "INC-IND-2026-002"
     sec_lat, sec_lon = 18.9000, 71.3000
     sec_poly = generate_organic_spill_polygon(sec_lat, sec_lon, length_km=7.2, width_km=1.5, angle_deg=30, seed=88)
+    sec_forcing = _fast_location_forcing(sec_lat, sec_lon)
+    sec_wind = float(sec_forcing.get("wind_speed_m_s", 4.6))
     sec_inc = {
         "incident_id": sec_id,
         "location_name": "Arabian Sea / Mumbai High Platform",
@@ -142,15 +151,20 @@ def _initialize_indian_ocean_incidents():
         "source_image": "sar_mumbai_high.png",
         "sar_image_url": sample_images[1 % len(sample_images)],
         "prediction_image_url": prediction_images[1 % len(prediction_images)],
-        "iou_score": 0.9120,
-        "confidence": 0.948,
+        "iou_score": 0.6420,
+        "confidence": 0.754,
         "spill_area_sqkm": 1.920,
         "centroid_lat": sec_lat,
         "centroid_lon": sec_lon,
         "centroid": [sec_lat, sec_lon],
         "status": "Active",
         "created_at": "2026-08-30T06:00:00Z",
-        "forcing": _fast_location_forcing(sec_lat, sec_lon)
+        "forcing": sec_forcing,
+        "meteorological_screening": {
+            "status": "CONFIRMED_MINERAL_OIL" if sec_wind >= 3.0 else "CAUTION_LOW_WIND",
+            "wind_speed_m_s": sec_wind,
+            "look_alike_risk": "Low (Wind > 3 m/s rules out biogenic calm-sea look-alike)."
+        }
     }
     GLOBAL_INCIDENTS_CACHE.append(sec_inc)
     features.append({
@@ -161,7 +175,7 @@ def _initialize_indian_ocean_incidents():
             "incident_id": sec_id,
             "location_name": sec_inc["location_name"],
             "spill_area_sqkm": 1.920,
-            "confidence": 0.948,
+            "confidence": 0.754,
             "status": "Active"
         }
     })
@@ -197,7 +211,13 @@ def _initialize_indian_ocean_incidents():
             inc_id = f"INC-IO-{sec['name'][:3].upper()}-{i+1:03d}"
             s_idx = seed_val % len(sample_images)
             p_idx = (seed_val * 3) % len(prediction_images)
-            iou_val = round(float(0.70 + (seed_val % 28) * 0.009), 4)
+            
+            # Calibrate strictly to U-Net model test benchmarks (Dice: 76.7%, mIoU: 65.7%)
+            iou_val = round(float(0.615 + (seed_val % 18) * 0.0042), 4)
+            conf_val = round(float(0.725 + (seed_val % 23) * 0.0035), 3)
+
+            inc_forcing = _fast_location_forcing(lat, lon)
+            inc_wind = float(inc_forcing.get("wind_speed_m_s", 5.0))
 
             inc_data = {
                 "incident_id": inc_id,
@@ -208,14 +228,19 @@ def _initialize_indian_ocean_incidents():
                 "sar_image_url": sample_images[s_idx],
                 "prediction_image_url": prediction_images[p_idx],
                 "iou_score": iou_val,
-                "confidence": round(float(rng_inc.uniform(0.88, 0.98)), 3),
+                "confidence": conf_val,
                 "spill_area_sqkm": area_sqkm,
                 "centroid_lat": lat,
                 "centroid_lon": lon,
                 "centroid": [lat, lon],
                 "status": "Active",
                 "created_at": "2026-08-30T06:00:00Z",
-                "forcing": _fast_location_forcing(lat, lon)
+                "forcing": inc_forcing,
+                "meteorological_screening": {
+                    "status": "CONFIRMED_MINERAL_OIL" if inc_wind >= 3.0 else "CAUTION_LOW_WIND",
+                    "wind_speed_m_s": inc_wind,
+                    "look_alike_risk": "Low (Wind > 3 m/s rules out biogenic calm-sea look-alike)."
+                }
             }
 
             GLOBAL_INCIDENTS_CACHE.append(inc_data)

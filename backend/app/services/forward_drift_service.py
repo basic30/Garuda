@@ -6,12 +6,18 @@ from shapely.geometry import Polygon, MultiPoint, mapping
 import pyproj
 from shapely.ops import transform
 
-from backend.app.services.environmental_service import fetch_environmental_forcing
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../..")))
+
+try:
+    from backend.app.services.environmental_service import fetch_environmental_forcing
+except ImportError:
+    from app.services.environmental_service import fetch_environmental_forcing
 
 def run_forward_drift_simulation(centroid_lat,
                                  centroid_lon,
                                  forcing_data=None,
-                                 num_particles=200,
+                                 num_particles=1000,
                                  hours=[6, 12, 24, 48],
                                  output_dir="outputs/forecasts"):
     """
@@ -78,6 +84,9 @@ def run_forward_drift_simulation(centroid_lat,
         hull_m = transform(project_to_meters, convex_hull)
         forecast_area_sqkm = hull_m.area / 1e6
 
+        # Particle coordinates [lon, lat]
+        particles_list = [[round(float(pt[0]), 5), round(float(pt[1]), 5)] for pt in pts_wgs84]
+
         geojson_feature = {
             "type": "Feature",
             "geometry": mapping(convex_hull),
@@ -87,6 +96,7 @@ def run_forward_drift_simulation(centroid_lat,
                 "forecast_area_sqkm": round(float(forecast_area_sqkm), 3),
                 "forcing": forcing_data,
                 "particle_count": num_particles,
+                "particles": particles_list,
                 "description": f"Probable forecast zone at +{h} hours"
             }
         }
@@ -99,6 +109,7 @@ def run_forward_drift_simulation(centroid_lat,
             "forecast_hour": h,
             "geojson_path": geojson_path,
             "area_sqkm": round(float(forecast_area_sqkm), 3),
+            "particles": particles_list,
             "geojson": geojson_feature
         }
 
