@@ -198,7 +198,7 @@ export default function IncidentDetails({
             </div>
             <img
               src={resolveImageUrl(incident?.prediction_image_url)}
-              alt="U-Net Mask Prediction Overlay"
+              alt="SegFormer-B2 Mask Prediction Overlay"
               className="w-full h-auto rounded-lg border border-slate-700/60 object-cover max-h-[260px] mx-auto"
               onError={(e) => { e.target.style.display = 'none'; }}
             />

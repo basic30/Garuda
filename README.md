@@ -55,7 +55,7 @@ graph TD
 
     %% Processing Core
     subgraph Backend ["⚡ Garuda FastAPI Backend Engine"]
-        E[PyTorch U-Net Model - ResNet34 Encoder]
+        E[PyTorch SegFormer-B2 Model]
         F[Shapely & PyProj GIS Engine - EPSG:3857 Projection]
         G[Lagrangian Physics Simulator - Forward & Backward Drift]
         H[Multi-Factor Suspect Vessel Ranking Engine]
@@ -99,7 +99,7 @@ sequenceDiagram
 
     Operator->>FE: Upload SAR Image / Select Incident
     FE->>BE: POST /api/incidents/upload
-    BE->>ML: Pass Tensor -> Run U-Net Segmentation
+    BE->>ML: Pass Tensor -> Run SegFormer-B2 Segmentation
     ML-->>BE: Binary Mask & Contour Polygons
     BE->>BE: Calculate EPSG:3857 Projected Area (km²)
     BE-->>FE: Return Incident Geometry & Metadata
@@ -124,7 +124,7 @@ sequenceDiagram
 
 | Module | Technical Implementation | Key Output / Metric |
 | :--- | :--- | :--- |
-| **SAR Segmentation** | PyTorch U-Net with ResNet34 encoder trained on satellite imagery | Binary masks & polygon boundaries |
+| **SAR Segmentation** | PyTorch SegFormer-B2 trained on satellite imagery | Binary masks & polygon boundaries |
 | **Geodetic Calculations** | `Shapely` & `PyProj` re-projected to **EPSG:3857** | Projected spill area in square kilometers ($km^2$) |
 | **Environmental Forcing** | Real-time atmospheric wind ($u_{10m}, v_{10m}$) and ocean current ($u_{\text{curr}}, v_{\text{curr}}$) vectors | Surface transport vector field |
 | **Forward Drift Simulation** | Euler-Maruyama integration with turbulent diffusion | +6h, +12h, +24h, +48h forecast envelopes |
@@ -209,8 +209,8 @@ c:\Users\snaha\Desktop\test/
 │       └── schemas/                    # Pydantic request/response validation schemas
 ├── ml/
 │   ├── src/
-│   │   ├── train.py                    # PyTorch U-Net training loop
-│   │   ├── model.py                    # ResNet34-U-Net segmentation model
+│   │   ├── train.py                    # PyTorch SegFormer-B2 training loop
+│   │   ├── model.py                    # SegFormer-B2 segmentation model
 │   │   ├── inference.py                # Post-processing & contour extraction
 │   │   └── evaluate.py                 # Test set metric evaluation (IoU, Dice)
 │   └── checkpoints/                    # Model weights (best_model.pth)
@@ -286,7 +286,7 @@ Open `http://localhost:5173/` in your browser to launch the **Garuda** dashboard
 
 ## 📊 Evaluation & Benchmark Results
 
-The PyTorch ResNet-34 U-Net model was evaluated on the **complete, untouched test set** of satellite SAR imagery (1,211 scenes / 79,364,096 pixels) with zero batch truncation:
+The PyTorch SegFormer-B2 model was evaluated on the **complete, untouched test set** of satellite SAR imagery (1,211 scenes / 79,364,096 pixels) with zero batch truncation:
 
 ### 1. Scene-Level Segmentation Performance (Macro Average across 1,211 Test Scenes)
 | Evaluation Metric | Benchmark Value | Operational Meaning |
@@ -311,7 +311,7 @@ The PyTorch ResNet-34 U-Net model was evaluated on the **complete, untouched tes
 | **Top Suspect Confidence** | **86.9%** | `PACIFIC EXPLORER` (Rank #1 Lagrangian Attribution) |
 
 ### 3. Training & Selection Provenance
-* **Backbone:** ResNet-34 encoder with ImageNet transfer learning weights and multiscale U-Net decoder.
+* **Backbone:** SegFormer-B2 (hierarchical Mix Transformer / MiT-B2 encoder) with transfer learning weights and lightweight MLP decoder.
 * **Loss Function:** Combined `BCEDiceLoss` with sample-wise spatial Dice calculation and class-imbalance weighting (`pos_weight=2.87`).
 * **Checkpoint Selection:** Checkpoint was selected strictly at **Epoch 3** based on peak validation Dice score (`0.7608`), completely independent of test-set data.
 * **Visual Overlays:** Qualitative 4-panel test predictions (SAR Image, Ground Truth, Predicted Mask, Color Overlay) are generated automatically in `results/test_predictions/`.
